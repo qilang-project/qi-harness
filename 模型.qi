@@ -1,40 +1,12 @@
 // 模型 — provider 抽象 + 会话配置
 //
-// 底层调用大模型 FFI；这层加：
-//   - 几个常见 provider 端点常量（OpenAI / Anthropic / 国产）
-//   - 配置 builder 模式（温度 / max_tokens / top_p）
-//   - 会话池（手动关闭烦人 — 用 创建模型 一站式开启）
+// 设计原则：任何 OpenAI 兼容 API 都通过 LLM(端点, 密钥, 模型) 一行配置完事。
+// 不内置 provider 常量 — 端点 URL 跟模型名是真值，用户自己写最清楚。
 
 包 Harness;
 
 导入 标准库.字符串;
 导入 标准库.大模型 作为 大模型;
-
-// ===== Provider 端点常量 =====
-公开 函数 OpenAI端点() : 字符串 {
-    返回 "https://api.openai.com/v1";
-}
-
-公开 函数 Anthropic端点() : 字符串 {
-    返回 "https://api.anthropic.com/v1";
-}
-
-公开 函数 DeepSeek端点() : 字符串 {
-    返回 "https://api.deepseek.com/v1";
-}
-
-公开 函数 Moonshot端点() : 字符串 {
-    返回 "https://api.moonshot.cn/v1";
-}
-
-公开 函数 智谱端点() : 字符串 {
-    返回 "https://open.bigmodel.cn/api/paas/v4";
-}
-
-公开 函数 本地端点(端口: 整数) : 字符串 {
-    // ollama / llama.cpp / vllm 等本地服务
-    返回 "http://127.0.0.1:" + 整数转字符串(端口) + "/v1";
-}
 
 // ===== 模型配置 =====
 公开 类型 模型配置 {
@@ -47,16 +19,25 @@
     超时秒: 整数,
 }
 
-公开 函数 默认配置() : 模型配置 {
+// 一站式 builder — 任何 OpenAI 兼容 API 一行配置
+//   LLM("https://api.deepseek.com", 密钥, "deepseek-chat")
+//   LLM("https://api.openai.com/v1", 密钥, "gpt-4o-mini")
+//   LLM("http://127.0.0.1:11434/v1", "ollama", "llama3.1")  // ollama 本地
+公开 函数 LLM(端点: 字符串, 密钥: 字符串, 模型: 字符串) : 模型配置 {
     返回 (模型配置 {
-        端点: OpenAI端点(),
-        模型: "gpt-4o-mini",
-        密钥: "",
+        端点: 端点,
+        模型: 模型,
+        密钥: 密钥,
         系统提示: "",
         温度: "0.7",
         最大令牌: 2048,
         超时秒: 60,
     });
+}
+
+// 默认配置 — 给「先建后填」工作流；推荐直接用 LLM(...)
+公开 函数 默认配置() : 模型配置 {
+    返回 LLM("https://api.openai.com/v1", "", "gpt-4o-mini");
 }
 
 公开 函数 配置端点(配置: 模型配置, 端点: 字符串) : 模型配置 {

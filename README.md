@@ -26,33 +26,30 @@ qi-harness/
 
 ```qi
 导入 Harness::{
-    模型配置, 默认配置, 配置模型, 配置密钥, 配置系统提示, 开启会话,
-    创建代理, 添加工具, 运行, 关闭, 简单问,
-    工具, 创建套件, 添加测例
+    模型配置, LLM, 配置系统提示, 开启会话,
+    创建代理, 添加工具, 运行, 关闭代理, 简单问,
+    工具
 };
 
-// 1. 配置 provider
-变量 配置: 模型配置 = 默认配置();
-配置 = 配置模型(配置, "gpt-4o-mini");
-配置 = 配置密钥(配置, 系统.读环境变量("QI_LLM_KEY"));
+// 1. 一行配置 — 任何 OpenAI 兼容 API
+变量 配置 = LLM("https://api.deepseek.com", 密钥, "deepseek-chat");
 配置 = 配置系统提示(配置, "你是助手。");
 
 // 2. 开会话 + 创建 agent
 变量 会话: 整数 = 开启会话(配置);
 变量 代理值: 代理 = 创建代理("我的助手", 会话);
 
-// 3. 注册工具
-变量 t: 工具 = (工具 {
+// 3. 注册工具（可选）
+代理值 = 添加工具(代理值, (工具 {
     名字: "查天气",
     描述: "查指定城市天气",
     参数schema: "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}",
     处理: 我的天气函数,
-});
-代理值 = 添加工具(代理值, t);
+}));
 
-// 4. 跑 agent（自动 tool dispatch loop）
-变量 回复: 字符串 = 运行(代理值, "东京天气怎样？");
-关闭(代理值);
+// 4. 跑 — 自动 tool dispatch loop + trace
+变量 回复 = 运行(代理值, "东京天气怎样？");
+关闭代理(代理值);
 ```
 
 ## Harness engineering 三件套
@@ -78,16 +75,18 @@ qi-harness/
 
 ## Provider 支持
 
-底层用 qi 标准库 `大模型` FFI（OpenAI 兼容 API + Anthropic 路径）。常见 provider 端点常量已内置：
+任何 OpenAI 兼容 API 都用 `LLM(baseurl, key, model)` 一行配置：
 
 ```qi
-配置.端点 = OpenAI端点();      // https://api.openai.com/v1
-配置.端点 = Anthropic端点();   // https://api.anthropic.com/v1
-配置.端点 = DeepSeek端点();    // https://api.deepseek.com/v1
-配置.端点 = Moonshot端点();    // https://api.moonshot.cn/v1
-配置.端点 = 智谱端点();        // https://open.bigmodel.cn/api/paas/v4
-配置.端点 = 本地端点(11434);   // http://127.0.0.1:11434/v1 （ollama）
+LLM("https://api.openai.com/v1",       密钥, "gpt-4o-mini")
+LLM("https://api.deepseek.com",        密钥, "deepseek-chat")
+LLM("https://api.moonshot.cn/v1",      密钥, "moonshot-v1-8k")
+LLM("https://open.bigmodel.cn/api/paas/v4", 密钥, "glm-4")
+LLM("http://127.0.0.1:11434/v1",       "ollama", "llama3.1")    // ollama 本地
+LLM("http://127.0.0.1:8000/v1",        "x",  "Qwen2.5")          // vllm 本地
 ```
+
+baseurl 跟模型名是字面值，写多少 provider 都 OK，不需要内置常量。
 
 ## 跟其他 qi-* 项目的关系
 
