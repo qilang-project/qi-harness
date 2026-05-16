@@ -1,0 +1,22 @@
+// qi-harness — LLM agent 框架
+//
+// 基于 Martin Fowler "harness engineering" 模式（martinfowler.com/articles/harness-engineering.html）
+// 把 LLM 调用包在可观测 + 可重试 + 可评估的外壳里，让 agent 像普通服务一样
+// 可调试、可测试、可监控。
+//
+// 核心 = 底层 大模型 FFI 已提供「调一次模型」；harness 层提供：
+//   - Agent loop：自动 tool dispatch，不用手写「调 → 看 → 执行 tool → 再调」
+//   - 追踪：每次调用、每次 tool 执行都打 event
+//   - 重试：模型 429 / 网络抖动自动 backoff
+//   - 评估：一组测试用例 + 期望，跑出来跟期望比对，agent 改了立刻看影响
+
+包 Harness;
+
+公开 导入 模型;
+公开 导入 对话;
+公开 导入 工具;
+公开 导入 代理;
+公开 导入 追踪;
+公开 导入 重试;
+// 评估 模块单独 import — 跨包 struct 解析当前有限制，主入口不 re-export
+// 用户用时：导入 Harness.评估::{测例, 评估套件, 创建套件, 添加测例, 运行};

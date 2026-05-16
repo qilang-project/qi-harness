@@ -1,0 +1,11 @@
+[包]
+名称 = "Harness"
+版本 = "0.1.0"
+入口 = "Harness.qi"
+
+[源码]
+目录 = ["."]
+
+[元数据]
+描述 = "qi-harness — LLM agent 框架，基于 Martin Fowler harness engineering 模式"
+作者 = "Qi Language Team"

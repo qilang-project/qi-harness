@@ -1,0 +1,5 @@
+*.ll
+*.o
+# qi 编译产物（无后缀可执行文件）
+examples/简单问答
+examples/工具助手
