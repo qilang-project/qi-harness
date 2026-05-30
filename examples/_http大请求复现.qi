@@ -1,0 +1,97 @@
+// _http大请求复现.qi — 复现/验证 qi-web 进程内大 POST body bug
+//
+// 这个 qi-web server 在一个 GET /test 处理器里：
+//   1) 连接 HTTP Playwright MCP（QI_MCP_URL 或默认 http://localhost:43570/mcp）
+//   2) browser_navigate 打开 example.com
+//   3) 发一个【大】 browser_evaluate（~1.8KB 的函数串，多行 querySelector）
+//   4) 把 evaluate 结果作为 HTTP 响应返回
+//
+// 步骤：
+//   终端1: npx -y @playwright/mcp@latest --port 43570
+//   终端2: ../target/debug/qi run examples/_http大请求复现.qi
+//   终端3: curl http://127.0.0.1:43571/test
+//
+// 修复前（reqwest）: 返回 mcp_no_response / 空 / 会话错误
+// 修复后（裸 TcpStream）: 返回真实 evaluate 结果（含 title / wordCount 等）
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness::{ 连接MCP_http, MCP调用工具, 关闭MCP };
+导入 Web::{ 应用, 上下文, 响应, 创建应用, 配置, 获取, JSON, 运行应用 };
+
+// 构造一个大的 browser_evaluate 函数串（>1.8KB），模拟 SEO 审计注入的 JS。
+函数 大函数() : 字符串 {
+    变量 f: 字符串 = "() => {\n";
+    f = f + "  const title = document.title;\n";
+    f = f + "  const metaDesc = document.querySelector('meta[name=\\\"description\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const ogTitle = document.querySelector('meta[property=\\\"og:title\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const ogDesc = document.querySelector('meta[property=\\\"og:description\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const ogImage = document.querySelector('meta[property=\\\"og:image\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const ogType = document.querySelector('meta[property=\\\"og:type\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const ogUrl = document.querySelector('meta[property=\\\"og:url\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const twCard = document.querySelector('meta[name=\\\"twitter:card\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const twTitle = document.querySelector('meta[name=\\\"twitter:title\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const twDesc = document.querySelector('meta[name=\\\"twitter:description\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const twImage = document.querySelector('meta[name=\\\"twitter:image\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const viewport = document.querySelector('meta[name=\\\"viewport\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const canonical = document.querySelector('link[rel=\\\"canonical\\\"]')?.getAttribute('href') || '';\n";
+    f = f + "  const robots = document.querySelector('meta[name=\\\"robots\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const author = document.querySelector('meta[name=\\\"author\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const keywords = document.querySelector('meta[name=\\\"keywords\\\"]')?.getAttribute('content') || '';\n";
+    f = f + "  const h1s = document.querySelectorAll('h1').length;\n";
+    f = f + "  const h2s = document.querySelectorAll('h2').length;\n";
+    f = f + "  const h3s = document.querySelectorAll('h3').length;\n";
+    f = f + "  const jsonlds = document.querySelectorAll('script[type=\\\"application/ld+json\\\"]').length;\n";
+    f = f + "  const imgs = document.querySelectorAll('img');\n";
+    f = f + "  let imgsWithAlt = 0;\n";
+    f = f + "  imgs.forEach(img => { if(img.getAttribute('alt')) imgsWithAlt++; });\n";
+    f = f + "  const imgAltCoverage = imgs.length > 0 ? Math.round((imgsWithAlt / imgs.length) * 100) : 100;\n";
+    f = f + "  const bodyText = document.body.innerText.replace(/\\s+/g, ' ').trim();\n";
+    f = f + "  const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;\n";
+    f = f + "  return JSON.stringify({ title, metaDesc, ogTitle, ogDesc, ogImage, ogType, ogUrl, twCard, twTitle, twDesc, twImage, viewport, canonical, robots, author, keywords, h1s, h2s, h3s, jsonlds, imgAltCoverage, wordCount });\n";
+    f = f + "}";
+    返回 f;
+}
+
+函数 处理test(上下文值: 上下文) : 响应 {
+    变量 基址: 字符串 = 系统.获取环境变量("QI_MCP_URL");
+    如果 (字符串::字节长度(基址) == 0) {
+        基址 = "http://localhost:43570/mcp";
+    }
+    变量 描述符: 字符串 = 连接MCP_http(基址);
+    如果 (字符串::字节长度(描述符) == 0) {
+        返回 JSON("{\"错误\":\"连接 MCP 失败\"}");
+    }
+
+    // 1) 导航（小请求）
+    变量 导航结果: 字符串 = MCP调用工具(描述符, "browser_navigate",
+        "{\"url\":\"https://example.com\"}");
+    IO.打印行("[复现] navigate len=" + 整数转字符串(字符串::字节长度(导航结果)));
+
+    // 2) 大 browser_evaluate（大请求 body — 触发 bug）
+    // 用标准库 JSON 安全转义函数串
+    变量 函数串: 字符串 = 大函数();
+    变量 参数对象: 整数 = J.创建对象();
+    J.设置字符串(参数对象, "function", 函数串);
+    变量 参数JSON: 字符串 = J.转字符串(参数对象);
+    IO.打印行("[复现] eval params bytes=" + 整数转字符串(字符串::字节长度(参数JSON)));
+    变量 评估结果: 字符串 = MCP调用工具(描述符, "browser_evaluate", 参数JSON);
+    IO.打印行("[复现] EVAL RESULT len=" + 整数转字符串(字符串::字节长度(评估结果)));
+
+    关闭MCP(描述符);
+    返回 JSON(评估结果);
+}
+
+函数 入口() {
+    变量 主机: 字符串 = "127.0.0.1";
+    变量 端口: 整数 = 43571;
+    变量 应用值: 应用 = 创建应用();
+    应用值 = 配置(应用值, 主机, 端口);
+    应用值 = 获取(应用值, "/test", 处理test);
+    IO.打印行("大请求复现服务: http://" + 主机 + ":" + 整数转字符串(端口) + "/test");
+    运行应用(应用值);
+}
