@@ -5,8 +5,8 @@
 导入 标准库.字符串;
 导入 标准库.JSON 作为 J;
 导入 Harness::{ 模型配置, 大模型, 配置系统提示, 配置温度, 开启会话, 关闭会话Harness,
-                创建代理, 装备MCP, 运行, 关闭代理,
-                连接MCP_stdio, 关闭MCP };
+                创建代理, 设置最大步数, 装备MCP, 运行, 关闭代理,
+                连接MCP_stdio, 连接MCP_http, 关闭MCP };
 导入 Web::{ 应用, 上下文, 响应, 创建应用, 配置, 获取, 提交,
             HTML, JSON, 请求主体, 运行应用 };
 
@@ -18,23 +18,34 @@
     变量 配置值: 模型配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
     配置值 = 配置温度(配置值, "0");
     配置值 = 配置系统提示(配置值,
-        "你是 SEO/GEO 审计专家。用提供的 playwright 工具完成：1) browser_navigate 打开目标 URL；"
-        + "2) browser_evaluate 注入 JS 采集：document.title、meta description、h1/h2/h3 数量、"
-        + "JSON-LD(script[type=application/ld+json]) 数量、og:/twitter: 标签、viewport、img alt 覆盖率、正文字数。"
-        + "然后只输出一段 JSON，不要多余文字，格式："
+        "你是 SEO/GEO 审计专家。严格按两步完成，尽量少调用工具：1) 用 browser_navigate 打开目标 URL；"
+        + "2) 只用【一次】 browser_evaluate 注入一段 JS，一次性返回一个对象，包含："
+        + "document.title、meta description、h1/h2/h3 数量、JSON-LD(script[type=application/ld+json]) 数量、"
+        + "og:/twitter: 标签是否齐全、viewport、img alt 覆盖率、正文字数。"
+        + "拿到数据后【不要再调用任何工具】，直接只输出一段 JSON，不要多余文字，格式："
         + "{\"seo分数\":0-100,\"geo分数\":0-100,\"维度\":[{\"名称\":\"\",\"分\":0,\"说明\":\"\"}],\"建议\":[\"\"]}");
     变量 会话: 整数 = 开启会话(配置值);
     如果 (会话 <= 0) {
         返回 "{\"错误\":\"会话开启失败（检查 QI_LLM_KEY）\"}";
     }
 
-    变量 mcp描述符: 字符串 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
+    // 传输可选：设了 QI_MCP_URL → 走 HTTP（连一台常驻 Playwright server，浏览器复用、更快，
+    // 适合简单页；重型 SPA 的大 browser_evaluate 在纯 Qi 的 SSE 处理下偶有不稳）。
+    // 未设 → 默认 stdio（每请求 spawn，慢但对重型页面最稳）。
+    变量 mcp基址: 字符串 = 系统.获取环境变量("QI_MCP_URL");
+    变量 mcp描述符: 字符串 = "";
+    如果 (字符串::字节长度(mcp基址) > 0) {
+        mcp描述符 = 连接MCP_http(mcp基址);
+    } 否则 {
+        mcp描述符 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
+    }
     如果 (字符串::字节长度(mcp描述符) == 0) {
         关闭会话Harness(会话);
-        返回 "{\"错误\":\"Playwright MCP 启动失败（需要 npx @playwright/mcp）\"}";
+        返回 "{\"错误\":\"连接 Playwright MCP 失败（stdio 需 npx；HTTP 需先启 --port 服务）\"}";
     }
 
     变量 代理值: 代理 = 创建代理("SEO审计员", 会话);
+    代理值 = 设置最大步数(代理值, 20);   // 复杂 SPA 需要更多工具轮次
     代理值 = 装备MCP(代理值, mcp描述符);
 
     变量 报告: 字符串 = 运行(代理值, "审计这个网址并按要求只输出 JSON：" + 网址);
