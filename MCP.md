@@ -1,27 +1,27 @@
 # qi-harness MCP 客户端
 
-qi-harness 自带一个**纯 Qi 写的 MCP（Model Context Protocol）客户端**，可把外部 MCP server 的工具拉进 agent 的工具循环。底层依赖运行时的 `标准库.子进程`（stdio）与 `标准库.HTTP.请求`（HTTP），协议/会话逻辑全部在 Qi 侧。
+qi-harness 内置 MCP（Model Context Protocol）客户端，可把外部 MCP server 的工具拉进 agent 的工具循环。底层依赖 `标准库.MCP客户端`（Rust 核心，`qi_mcpc_*` FFI），协议/会话逻辑在 Rust 侧，Qi 层通过 `MCP客户端.qi` 提供中文封装。
 
 ## 传输
 
-连接返回一个**描述符字符串**，后续所有调用都用它：
+连接返回一个**描述符字符串**（`"mcpc|<id>"`），后续所有调用都用它：
 
 ```qi
 导入 Harness::{ 连接MCP_stdio, 连接MCP_http, 装备MCP, 关闭MCP };
 
 // 1) stdio：本进程 spawn server 子进程
 变量 描述符 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
-//  → "stdio|<子进程句柄>"
+//  → "mcpc|1"
 
 // 2) HTTP（Streamable HTTP）：连已在监听的 server
 //    server: npx -y @playwright/mcp@latest --port 43528
 变量 描述符2 = 连接MCP_http("http://localhost:43528/mcp");
-//  → "http|<基址>|<会话id>"   ⚠️ host 必须 localhost（127.0.0.1 会被 403）
+//  → "mcpc|2"
 ```
 
 `连接*` 内部完成 `initialize` 握手 + `notifications/initialized`；失败返回空串 `""`。
 
-## 能力
+## 出站能力（Client → Server）
 
 | 方法 | 作用 |
 |---|---|
@@ -42,22 +42,89 @@ qi-harness 自带一个**纯 Qi 写的 MCP（Model Context Protocol）客户端*
 
 `派发` 按工具来源分流：MCP 工具转发到 `MCP调用工具`，本地工具走函数指针。
 
-## 健壮性
+## 入站能力（Server → Client，双向，仅 stdio）
 
-- stdio 读取走 `子进程.读取行超时(句柄, 30000)`（后台读线程 + 队列），server 挂死不会永久阻塞。
-- 不支持的方法返回结构化 JSON-RPC `error`（如 `-32601 Method not found`），不会崩。
+Rust 核心在 stdio 连接上启动后台 reader，使客户端既能发请求、也能处理服务器主动发来的请求/通知。
 
-## 明确不支持（纯 Qi 同步模型的边界）
+### API
 
-- **服务器主动通知**（`notifications/tools/list_changed`、`progress`、`cancelled`）：当前同步请求/响应模型会跳过它们，不做实时处理。
-- **双向 / 服务器→客户端请求**：`sampling/createMessage`、`roots/list`、elicitation 不支持（需要后台 reader + 入站请求分发，纯 Qi 做不了）。
-- **并发 / 多 id**：JSON-RPC `id` 固定为 1，仅支持串行请求/响应。
-- HTTP 传输 host 必须 `localhost`；SEO 示例的 web 层为每个请求 spawn 一个浏览器。
+```qi
+导入 Harness::{ 设置采样处理, 设置根目录, 取通知, 设置询问处理 };
+```
 
-要做到这些需把客户端核心下沉到 Rust（`标准库.MCP客户端`）——当前刻意保持纯 Qi。
+| 方法 | 作用 |
+|---|---|
+| `设置采样处理(描述符, 处理)` | 注册 `sampling/createMessage` 处理器（Qi 函数 `(字符串): 字符串`） |
+| `设置根目录(描述符, 根JSON)` | 设置 `roots/list` 返回的根目录数组 JSON |
+| `取通知(描述符)` | 排空已缓冲的服务器通知，返回 JSON 数组串 |
+| `设置询问处理(描述符, 处理)` | 注册 `elicitation/create` 处理器 |
+
+处理函数签名统一为 `函数(参数JSON: 字符串): 字符串`：输入为服务器发来的请求 params JSON，输出为符合 MCP 规范的响应 JSON。
+
+### 采样处理示例
+
+```qi
+// stub 采样处理器（不需要真实 LLM）
+函数 采样处理(参数JSON: 字符串) : 字符串 {
+    返回 "{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"来自Qi的采样\"},\"model\":\"qi-stub\",\"stopReason\":\"endTurn\"}";
+}
+
+函数 入口() {
+    变量 描述符: 字符串 = 连接MCP_stdio("npx", "[\"-y\",\"@modelcontextprotocol/server-everything\"]");
+    设置采样处理(描述符, 采样处理);
+
+    // 调用 trigger-sampling-request（args: prompt + maxTokens）
+    // 服务器会向客户端发出 sampling/createMessage，客户端调用 采样处理 并回写结果
+    变量 结果: 字符串 = MCP调用工具(描述符, "trigger-sampling-request",
+        "{\"prompt\":\"测试\",\"maxTokens\":50}");
+    IO.打印行(结果);   // 含 "来自Qi的采样"
+
+    变量 通知: 字符串 = 取通知(描述符);  // "[{\"jsonrpc\":\"2.0\",\"method\":\"notifications/...\"}]"
+    IO.打印行(通知);
+    关闭MCP(描述符);
+}
+```
+
+完整可运行示例见 `examples/mcp_采样.qi`。
+
+## 服务端（标准库.MCP服务器）
+
+`标准库.MCP服务器` 是另一独立模块，用于在 Qi 程序里**实现** MCP server。功能包括：
+
+- 工具/资源/提示注册与处理
+- 通知推送：`通知工具变更` / `日志消息` / `通知进度`
+- `logging/setLevel` 动态日志级别
+- HTTP 传输：GET /mcp SSE 事件流（服务端→客户端推送）
+
+详见 `qi/示例/标准库/MCP服务器/`。
+
+## HTTP 传输注意事项
+
+HTTP（Streamable HTTP）传输适合背靠背/简单调用场景，但有一个已知限制：
+
+> Playwright MCP 等工具的 HTTP 模式会把 MCP 会话绑定到 TCP 连接。在**有多秒 LLM 间隙的 agent 循环**中，连接可能在服务器空闲超时后断开，导致下一次调用丢失会话。
+> **agent 循环请优先使用 stdio 传输**；HTTP 适合无间隙的后台批量/简单调用。
+
+其他限制：HTTP host 必须为 `localhost`（`127.0.0.1` 返回 403）。
+
+## 已验证一致性（Conformance）
+
+| 测试组合 | 结果 |
+|---|---|
+| 客户端（stdio）× `@modelcontextprotocol/server-everything` tools/resources/prompts | ✓ |
+| 客户端（stdio）× `server-everything` 完整采样往返（`trigger-sampling-request` → Qi 处理器） | ✓ |
+| 客户端（HTTP）× Playwright MCP server（tools/call 含 SSE 大响应） | ✓ |
+| 服务端 × 独立 Python MCP 客户端 | ✓ |
+| 服务端 × curl JSON-RPC | ✓ |
+
+## 明确不支持（已知后续事项）
+
+- **HTTP 服务端→客户端双向**：客户端通过 GET /mcp SSE 接收服务器推送（HTTP 模式下 `设置采样处理` 不生效）。
+- **`resources/subscribe`**：资源订阅协议。
 
 ## 示例
 
+- `examples/mcp_采样.qi` — 双向采样一致性示例（无需 LLM 密钥）
 - `examples/mcp测试.qi` — stdio tools/list
 - `examples/mcp_http导航.qi` — HTTP 传输 + agent 跑工具循环
 - `examples/mcp_资源.qi` — resources/prompts 调用通路

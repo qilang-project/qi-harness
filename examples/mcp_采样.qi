@@ -1,0 +1,104 @@
+// mcp_采样.qi — Qi-level MCP 采样（sampling/createMessage）一致性示例
+//
+// 演示客户端向 @modelcontextprotocol/server-everything 注册 Qi 采样处理器，
+// 然后调用服务器的 trigger-sampling-request 工具——服务器会通过
+// sampling/createMessage 回调我们的 Qi 处理函数——验证双向通路端到端畅通。
+//
+// 运行（无需任何 API 密钥）：
+//   cd qi-harness && ../target/debug/qi run examples/mcp_采样.qi
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness::{
+    连接MCP_stdio, 关闭MCP,
+    MCP列出工具, MCP调用工具,
+    设置采样处理, 设置根目录, 取通知
+};
+
+// ─── stub 采样处理器 ───
+// 签名固定：函数(参数JSON: 字符串): 字符串
+// 输入  : sampling/createMessage params JSON（来自服务器）
+// 输出  : 符合 MCP CreateMessageResult 的 JSON
+函数 采样处理(参数JSON: 字符串) : 字符串 {
+    IO.打印行("[采样处理] 收到服务器采样请求，参数=" + 参数JSON);
+    返回 "{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"来自Qi的采样\"},\"model\":\"qi-stub\",\"stopReason\":\"endTurn\"}";
+}
+
+函数 入口() {
+    IO.打印行("=== MCP 采样（bidirectional）一致性测试 ===");
+    IO.打印行("");
+
+    // 1. 连接 server-everything
+    IO.打印行("[1] 连接 @modelcontextprotocol/server-everything ...");
+    变量 描述符: 字符串 = 连接MCP_stdio("npx", "[\"-y\",\"@modelcontextprotocol/server-everything\"]");
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("  ✗ 连接失败（请确认 npx 已安装）");
+        返回;
+    }
+    IO.打印行("  ✓ 已连接: " + 描述符);
+    IO.打印行("");
+
+    // 2. 注册 Qi 采样处理器
+    IO.打印行("[2] 注册采样处理器 ...");
+    变量 采样结果: 整数 = 设置采样处理(描述符, 采样处理);
+    如果 (采样结果 == 1) {
+        IO.打印行("  ✓ 采样处理器已注册");
+    } 否则 {
+        IO.打印行("  ✗ 采样处理器注册失败");
+    }
+    IO.打印行("");
+
+    // 3. 可选：设置根目录（演示 roots 能力）
+    IO.打印行("[3] 设置根目录 ...");
+    变量 根JSON: 字符串 = "[{\"uri\":\"file:///tmp\",\"name\":\"临时目录\"}]";
+    变量 根结果: 整数 = 设置根目录(描述符, 根JSON);
+    如果 (根结果 == 1) {
+        IO.打印行("  ✓ 根目录已设置");
+    } 否则 {
+        IO.打印行("  ✗ 根目录设置失败（Rust核心不支持时为正常）");
+    }
+    IO.打印行("");
+
+    // 4. 验证服务器工具列表（确认 trigger-sampling-request 可见）
+    IO.打印行("[4] 列出工具 ...");
+    变量 工具列表: 字符串 = MCP列出工具(描述符);
+    如果 (字符串::包含(工具列表, "trigger-sampling-request") == 1) {
+        IO.打印行("  ✓ 服务器已暴露 trigger-sampling-request（客户端声明了 sampling 能力）");
+    } 否则 {
+        IO.打印行("  ✗ 未看到 trigger-sampling-request — 服务器未检测到客户端 sampling 能力");
+        IO.打印行("    工具列表摘要（前200字节）: " + 字符串::子串(工具列表, 0, 200));
+        关闭MCP(描述符);
+        返回;
+    }
+    IO.打印行("");
+
+    // 5. 调用 trigger-sampling-request（触发服务器→客户端 sampling/createMessage）
+    IO.打印行("[5] 调用 trigger-sampling-request ...");
+    变量 调用参数: 字符串 = "{\"prompt\":\"奇语采样测试\",\"maxTokens\":50}";
+    变量 工具结果: 字符串 = MCP调用工具(描述符, "trigger-sampling-request", 调用参数);
+    IO.打印行("  工具结果: " + 工具结果);
+    如果 (字符串::包含(工具结果, "来自Qi的采样") == 1) {
+        IO.打印行("  ✓ 端到端通路验证成功：服务器采样请求 → Qi处理器 → 服务器收到结果 → 工具完成");
+    } 否则 {
+        如果 (字符串::包含(工具结果, "LLM sampling result") == 1) {
+            IO.打印行("  ✓ 工具完成（含 LLM sampling result 字段）");
+        } 否则 {
+            IO.打印行("  ✗ 意外结果，请检查上方采样处理器日志");
+        }
+    }
+    IO.打印行("");
+
+    // 6. 取通知（排空服务器推送的通知缓冲区）
+    IO.打印行("[6] 取通知 ...");
+    变量 通知: 字符串 = 取通知(描述符);
+    IO.打印行("  通知: " + 通知);
+    IO.打印行("");
+
+    // 7. 关闭
+    关闭MCP(描述符);
+    IO.打印行("[7] 连接已关闭");
+    IO.打印行("");
+    IO.打印行("=== 完成 ===");
+}
