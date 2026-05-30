@@ -201,6 +201,27 @@
     返回 1;
 }
 
+// ——— Resources / Prompts / Completion ———
+
+// resources/list — 返回原始响应行（result.resources 是资源数组）
+公开 函数 MCP列出资源(描述符: 字符串) : 字符串 { 返回 发送请求(描述符, "resources/list", "{}"); }
+
+// resources/read — 读取指定 URI 的资源内容
+公开 函数 MCP读取资源(描述符: 字符串, URI: 字符串) : 字符串 {
+    返回 发送请求(描述符, "resources/read", "{\"uri\":\"" + URI + "\"}");
+}
+
+// prompts/list — 返回原始响应行（result.prompts 是提示数组）
+公开 函数 MCP列出提示(描述符: 字符串) : 字符串 { 返回 发送请求(描述符, "prompts/list", "{}"); }
+
+// prompts/get — 按名称取提示模板，可附参数
+公开 函数 MCP获取提示(描述符: 字符串, 名字: 字符串, 参数JSON: 字符串) : 字符串 {
+    返回 发送请求(描述符, "prompts/get", "{\"name\":\"" + 名字 + "\",\"arguments\":" + 参数JSON + "}");
+}
+
+// completion/complete — 补全请求，参数JSON 为完整 params 对象串
+公开 函数 MCP补全(描述符: 字符串, 参数JSON: 字符串) : 字符串 { 返回 发送请求(描述符, "completion/complete", 参数JSON); }
+
 // 保留向后兼容：旧接口（整数句柄）— 已废弃，迁移用。勿新增调用。
 公开 函数 MCP请求(句柄: 整数, 方法: 字符串, 参数JSON: 字符串) : 字符串 {
     变量 描述符: 字符串 = "stdio|" + 整数转字符串(句柄);
