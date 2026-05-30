@@ -3,3 +3,8 @@
 # qi 编译产物（无后缀可执行文件）
 examples/简单问答
 examples/工具助手
+
+# SEO 审计示例运行产物
+.playwright-mcp/
+examples/seo审计/服务
+examples/seo审计/seo命令行
