@@ -18,21 +18,24 @@ qi-harness/
 ├── 重试.qi             # exponential backoff
 ├── 评估.qi             # Eval harness — 跑测试用例 + 期望对比
 └── examples/
-    ├── 简单问答.qi      # 单轮对话
-    └── 工具助手.qi      # tool-using agent（天气 + 时间）
+    ├── deepseek测试.qi   # 单轮对话（简单问）
+    ├── deepseek工具.qi   # tool-using agent（天气 + 时间，含并行工具调用）
+    └── deepseek流式.qi   # 流式输出
 ```
+
+> 📘 AI 辅助：本项目带 [`SKILL.md`](SKILL.md)，可作为 agent skill 安装，让 AI 助手准确生成 qi-harness 代码。
 
 ## 核心 API
 
 ```qi
 导入 Harness::{
-    模型配置, LLM, 配置系统提示, 开启会话,
-    创建代理, 添加工具, 运行, 关闭代理, 简单问,
+    模型配置, 大模型, 配置系统提示, 开启会话,
+    创建代理, 添加工具, 运行, 简单问, 流式问, 关闭代理,
     工具
 };
 
 // 1. 一行配置 — 任何 OpenAI 兼容 API
-变量 配置 = LLM("https://api.deepseek.com", 密钥, "deepseek-chat");
+变量 配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
 配置 = 配置系统提示(配置, "你是助手。");
 
 // 2. 开会话 + 创建 agent
@@ -47,8 +50,13 @@ qi-harness/
     处理: 我的天气函数,
 }));
 
-// 4. 跑 — 自动 tool dispatch loop + trace
+// 4. 跑 — 自动 tool dispatch loop（支持并行 tool_calls）+ trace
 变量 回复 = 运行(代理值, "东京天气怎样？");
+
+// 或：一次性问答 / 流式输出
+变量 简短 = 简单问(代理值, "用一句话介绍 qi");
+流式问(代理值, "详细解释 LLVM", 我的块回调);   // 块回调: 函数(字符串): 整数
+
 关闭代理(代理值);
 ```
 
@@ -75,18 +83,27 @@ qi-harness/
 
 ## Provider 支持
 
-任何 OpenAI 兼容 API 都用 `LLM(baseurl, key, model)` 一行配置：
+任何 OpenAI 兼容 API 都用 `大模型(baseurl, key, model)` 一行配置：
 
 ```qi
-LLM("https://api.openai.com/v1",       密钥, "gpt-4o-mini")
-LLM("https://api.deepseek.com",        密钥, "deepseek-chat")
-LLM("https://api.moonshot.cn/v1",      密钥, "moonshot-v1-8k")
-LLM("https://open.bigmodel.cn/api/paas/v4", 密钥, "glm-4")
-LLM("http://127.0.0.1:11434/v1",       "ollama", "llama3.1")    // ollama 本地
-LLM("http://127.0.0.1:8000/v1",        "x",  "Qwen2.5")          // vllm 本地
+大模型("https://api.openai.com/v1",       密钥, "gpt-4o-mini")
+大模型("https://api.deepseek.com",        密钥, "deepseek-chat")
+大模型("https://api.moonshot.cn/v1",      密钥, "moonshot-v1-8k")
+大模型("https://open.bigmodel.cn/api/paas/v4", 密钥, "glm-4")
+大模型("http://127.0.0.1:11434/v1",       "ollama", "llama3.1")    // ollama 本地
+大模型("http://127.0.0.1:8000/v1",        "x",  "Qwen2.5")          // vllm 本地
 ```
 
 baseurl 跟模型名是字面值，写多少 provider 都 OK，不需要内置常量。
+密钥从环境变量读，不要硬编码：`变量 密钥 = 系统.获取环境变量("QI_LLM_KEY");`
+
+## 运行示例
+
+```bash
+QI_LLM_KEY=sk-... qi run examples/deepseek测试.qi    # 单轮问答
+QI_LLM_KEY=sk-... qi run examples/deepseek工具.qi    # 工具调用（并行 tool_calls）
+QI_LLM_KEY=sk-... qi run examples/deepseek流式.qi    # 流式输出
+```
 
 ## 跟其他 qi-* 项目的关系
 
