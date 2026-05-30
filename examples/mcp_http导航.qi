@@ -1,0 +1,37 @@
+包 主程序;
+
+// HTTP(Streamable) 传输的端到端示例：经 HTTP MCP 连接 Playwright，
+// 装备工具后让 agent 真打开页面。
+// 先在另一个终端起 HTTP server： npx -y @playwright/mcp@latest --port 43528
+// 注意 host 必须 localhost（127.0.0.1 会被 403）。
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 Harness::{ 模型配置, 大模型, 配置系统提示, 配置温度, 开启会话, 关闭会话Harness,
+                创建代理, 装备MCP, 运行, 关闭代理, 连接MCP_http, 关闭MCP };
+
+函数 入口() {
+    变量 密钥: 字符串 = 系统.获取环境变量("QI_LLM_KEY");
+    变量 配置: 模型配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
+    配置 = 配置温度(配置, "0");
+    配置 = 配置系统提示(配置, "你能用 playwright 工具操作浏览器。简洁回答。");
+    变量 会话: 整数 = 开启会话(配置);
+
+    变量 描述符: 字符串 = 连接MCP_http("http://localhost:43528/mcp");
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("HTTP MCP 连接失败（先起 npx @playwright/mcp --port 43528）");
+        返回;
+    }
+    IO.打印行("已连接 HTTP: " + 描述符);
+
+    变量 代理值: 代理 = 创建代理("HTTP浏览器助手", 会话);
+    代理值 = 装备MCP(代理值, 描述符);
+
+    变量 回复: 字符串 = 运行(代理值, "打开 https://example.com ，告诉我页面 <h1> 的文字。");
+    IO.打印行("=== 回复 ===");
+    IO.打印行(回复);
+
+    关闭MCP(描述符);
+    关闭代理(代理值);
+}
