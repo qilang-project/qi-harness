@@ -28,18 +28,18 @@
         返回 "{\"错误\":\"会话开启失败（检查 QI_LLM_KEY）\"}";
     }
 
-    变量 mcp句柄: 整数 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
-    如果 (mcp句柄 <= 0) {
+    变量 mcp描述符: 字符串 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
+    如果 (字符串::字节长度(mcp描述符) == 0) {
         关闭会话Harness(会话);
         返回 "{\"错误\":\"Playwright MCP 启动失败（需要 npx @playwright/mcp）\"}";
     }
 
     变量 代理值: 代理 = 创建代理("SEO审计员", 会话);
-    代理值 = 装备MCP(代理值, mcp句柄);
+    代理值 = 装备MCP(代理值, mcp描述符);
 
     变量 报告: 字符串 = 运行(代理值, "审计这个网址并按要求只输出 JSON：" + 网址);
 
-    关闭MCP(mcp句柄);
+    关闭MCP(mcp描述符);
     关闭代理(代理值);
 
     // 去掉模型常加的 ```json ... ``` 代码围栏，保证返回纯 JSON（JSON.parse 容忍首尾空白）

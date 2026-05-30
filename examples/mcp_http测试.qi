@@ -1,0 +1,43 @@
+// mcp_http测试.qi — 验证 HTTP(Streamable) MCP 传输
+//
+// 使用前请先启动 Playwright MCP HTTP server：
+//   npx @playwright/mcp@latest --port 43526
+//
+// 然后运行本文件：
+//   ../target/debug/qi run examples/mcp_http测试.qi
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness::{ 连接MCP_http, MCP列出工具, 关闭MCP };
+
+函数 入口() {
+    变量 基址: 字符串 = "http://localhost:43526/mcp";
+    IO.打印行("[HTTP MCP 测试] 连接 " + 基址 + " ...");
+
+    变量 描述符: 字符串 = 连接MCP_http(基址);
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("✗ 连接失败（请确认服务已启动：npx @playwright/mcp@latest --port 43526）");
+        返回;
+    }
+    IO.打印行("[HTTP MCP 测试] 描述符: " + 描述符);
+
+    变量 工具响应: 字符串 = MCP列出工具(描述符);
+    IO.打印行("[HTTP MCP 测试] tools/list 响应长度: " + 整数转字符串(字符串::字节长度(工具响应)));
+
+    如果 (字符串::字节长度(工具响应) == 0) {
+        IO.打印行("✗ tools/list 返回空");
+        关闭MCP(描述符);
+        返回;
+    }
+
+    变量 含导航: 整数 = 字符串::查找(工具响应, "browser_navigate");
+    如果 (含导航 >= 0) {
+        IO.打印行("✓ 含 browser_navigate — HTTP 传输验证通过");
+    } 否则 {
+        IO.打印行("✗ 未找到 browser_navigate，响应片段: " + 字符串::子串(工具响应, 0, 200));
+    }
+
+    关闭MCP(描述符);
+}
