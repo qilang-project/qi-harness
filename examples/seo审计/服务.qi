@@ -1,0 +1,107 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness::{ 模型配置, 大模型, 配置系统提示, 配置温度, 开启会话, 关闭会话Harness,
+                创建代理, 装备MCP, 运行, 关闭代理,
+                连接MCP_stdio, 关闭MCP };
+导入 Web::{ 应用, 上下文, 响应, 创建应用, 配置, 获取, 提交,
+            HTML, JSON, 请求主体, 运行应用 };
+
+// 主机和端口作为函数局部变量使用（全局常量的字符串类型在 codegen 有已知限制）
+
+// ——— 审计核心：给定 URL，返回模型产出的报告 JSON 串 ———
+函数 审计(网址: 字符串) : 字符串 {
+    变量 密钥: 字符串 = 系统.获取环境变量("QI_LLM_KEY");
+    变量 配置值: 模型配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
+    配置值 = 配置温度(配置值, "0");
+    配置值 = 配置系统提示(配置值,
+        "你是 SEO/GEO 审计专家。用提供的 playwright 工具完成：1) browser_navigate 打开目标 URL；"
+        + "2) browser_evaluate 注入 JS 采集：document.title、meta description、h1/h2/h3 数量、"
+        + "JSON-LD(script[type=application/ld+json]) 数量、og:/twitter: 标签、viewport、img alt 覆盖率、正文字数。"
+        + "然后只输出一段 JSON，不要多余文字，格式："
+        + "{\"seo分数\":0-100,\"geo分数\":0-100,\"维度\":[{\"名称\":\"\",\"分\":0,\"说明\":\"\"}],\"建议\":[\"\"]}");
+    变量 会话: 整数 = 开启会话(配置值);
+    如果 (会话 <= 0) {
+        返回 "{\"错误\":\"会话开启失败（检查 QI_LLM_KEY）\"}";
+    }
+
+    变量 mcp句柄: 整数 = 连接MCP_stdio("npx", "[\"-y\",\"@playwright/mcp@latest\"]");
+    如果 (mcp句柄 <= 0) {
+        关闭会话Harness(会话);
+        返回 "{\"错误\":\"Playwright MCP 启动失败（需要 npx @playwright/mcp）\"}";
+    }
+
+    变量 代理值: 代理 = 创建代理("SEO审计员", 会话);
+    代理值 = 装备MCP(代理值, mcp句柄);
+
+    变量 报告: 字符串 = 运行(代理值, "审计这个网址并按要求只输出 JSON：" + 网址);
+
+    关闭MCP(mcp句柄);
+    关闭代理(代理值);
+    返回 报告;
+}
+
+// ——— 路由 ———
+
+// GET / — 表单页（内嵌 JS，通过 fetch POST /api/audit 提交并渲染结果）
+函数 表单页(上下文值: 上下文) : 响应 {
+    变量 页面: 字符串 = "<!doctype html><meta charset=utf-8>"
+        + "<title>SEO/GEO 审计器</title>"
+        + "<style>body{font-family:sans-serif;max-width:680px;margin:40px auto}"
+        + "input{width:70%;padding:8px}button{padding:8px 16px;margin-left:8px}"
+        + "#结果{margin-top:24px;white-space:pre-wrap;background:#f5f5f5;padding:16px}"
+        + "</style>"
+        + "<h1>SEO / GEO 友好度审计</h1>"
+        + "<div><input id=网址 placeholder='https://example.com'>"
+        + "<button onclick='审计()'>审计</button></div>"
+        + "<div id=状态 style='color:#888;margin-top:8px'></div>"
+        + "<pre id=结果></pre>"
+        + "<p style='color:#888'>由 qi-web + qi-harness + Playwright MCP 驱动</p>"
+        + "<script>"
+        + "async function 审计(){"
+        + "  var u=document.getElementById('网址').value;"
+        + "  if(!u){alert('请输入网址');return;}"
+        + "  document.getElementById('状态').textContent='审计中，请稍候…';"
+        + "  document.getElementById('结果').textContent='';"
+        + "  try{"
+        + "    var r=await fetch('/api/audit',{method:'POST',"
+        + "      headers:{'Content-Type':'application/json'},"
+        + "      body:JSON.stringify({url:u})});"
+        + "    var d=await r.json();"
+        + "    document.getElementById('状态').textContent='';"
+        + "    document.getElementById('结果').textContent=JSON.stringify(d,null,2);"
+        + "  }catch(e){"
+        + "    document.getElementById('状态').textContent='错误: '+e;"
+        + "  }"
+        + "}"
+        + "</script>";
+    返回 HTML(页面);
+}
+
+// POST /api/audit — JSON API：body = {"url":"..."} → 返回报告 JSON
+函数 处理API(上下文值: 上下文) : 响应 {
+    变量 主体: 字符串 = 请求主体(上下文值);
+    变量 请求对象: 整数 = J.解码(主体);
+    变量 网址: 字符串 = "";
+    如果 (请求对象 > 0) {
+        网址 = J.获取字符串(请求对象, "url");
+    }
+    如果 (字符串::字节长度(网址) == 0) {
+        返回 JSON("{\"错误\":\"缺少 url\"}");
+    }
+    返回 JSON(审计(网址));
+}
+
+函数 入口() {
+    变量 主机: 字符串 = "127.0.0.1";
+    变量 端口: 整数 = 43517;
+    变量 应用值: 应用 = 创建应用();
+    应用值 = 配置(应用值, 主机, 端口);
+    应用值 = 获取(应用值, "/", 表单页);
+    应用值 = 提交(应用值, "/api/audit", 处理API);
+    IO.打印行("SEO/GEO 审计器: http://" + 主机 + ":" + 整数转字符串(端口));
+    运行应用(应用值);
+}
