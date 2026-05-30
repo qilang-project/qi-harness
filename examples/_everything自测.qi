@@ -1,0 +1,102 @@
+// _everything自测.qi — MCP 客户端 Rust 核心验证
+//
+// 1. 先测试 stdio 传输连接我们自己的加法服务器二进制
+// 2. 用 @modelcontextprotocol/server-everything（若 npx 可用）测工具/资源/提示
+//
+// 前置：编译加法服务器
+//   cd qi && ../target/debug/qi compile 示例/标准库/MCP服务器/stdio服务.qi -o /tmp/qi_stdio服务
+//
+// 运行：cd qi-harness && ../target/debug/qi run examples/_everything自测.qi
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness::{ 连接MCP_stdio, MCP列出工具, MCP调用工具, MCP列出资源, MCP列出提示, 关闭MCP };
+
+函数 入口() {
+    IO.打印行("=== MCP 客户端 Rust 核心自测 ===");
+    IO.打印行("");
+
+    // ─── 测试 1：连接我们自己的 stdio 加法服务器二进制 ───
+    IO.打印行("[测试1] 连接 qi stdio 加法服务器 /tmp/qi_stdio服务...");
+    变量 描述符: 字符串 = 连接MCP_stdio("/tmp/qi_stdio服务", "[]");
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("  ✗ 连接失败（请先运行：cd qi && ../target/debug/qi compile 示例/标准库/MCP服务器/stdio服务.qi -o /tmp/qi_stdio服务）");
+        返回;
+    }
+    IO.打印行("  ✓ 已连接: " + 描述符);
+
+    // tools/list
+    变量 工具响应: 字符串 = MCP列出工具(描述符);
+    变量 工具响应长度: 整数 = 字符串::字节长度(工具响应);
+    IO.打印行("  工具列表响应长度: " + 整数转字符串(工具响应长度));
+    如果 (字符串::包含(工具响应, "加法") == 1) {
+        IO.打印行("  ✓ 含工具 '加法'");
+    } 否则 {
+        IO.打印行("  ✗ 未找到工具 '加法'");
+    }
+
+    // tools/call 加法 3+4=7
+    变量 调用结果: 字符串 = MCP调用工具(描述符, "加法", "{\"a\":3,\"b\":4}");
+    IO.打印行("  加法 3+4 结果: " + 调用结果);
+    如果 (字符串::包含(调用结果, "7") == 1) {
+        IO.打印行("  ✓ 加法 3+4=7 正确");
+    } 否则 {
+        IO.打印行("  ✗ 加法结果不含预期值7");
+    }
+
+    // resources/list
+    变量 资源响应: 字符串 = MCP列出资源(描述符);
+    如果 (字符串::字节长度(资源响应) > 0) {
+        IO.打印行("  ✓ resources/list 有响应 (长度=" + 整数转字符串(字符串::字节长度(资源响应)) + ")");
+    }
+
+    // prompts/list
+    变量 提示响应: 字符串 = MCP列出提示(描述符);
+    如果 (字符串::字节长度(提示响应) > 0) {
+        IO.打印行("  ✓ prompts/list 有响应 (长度=" + 整数转字符串(字符串::字节长度(提示响应)) + ")");
+    }
+
+    关闭MCP(描述符);
+    IO.打印行("  ✓ 已关闭 stdio 连接");
+    IO.打印行("");
+
+    // ─── 测试 2：server-everything (若 npx 可用) ───
+    IO.打印行("[测试2] 尝试连接 @modelcontextprotocol/server-everything via stdio...");
+    变量 everything描述符: 字符串 = 连接MCP_stdio("npx", "[\"-y\",\"@modelcontextprotocol/server-everything\"]");
+    如果 (字符串::字节长度(everything描述符) == 0) {
+        IO.打印行("  ✗ server-everything 不可用（npx 未安装或网络不通），跳过");
+    } 否则 {
+        IO.打印行("  ✓ 已连接: " + everything描述符);
+
+        变量 ev工具: 字符串 = MCP列出工具(everything描述符);
+        IO.打印行("  工具列表响应长度: " + 整数转字符串(字符串::字节长度(ev工具)));
+        如果 (字符串::字节长度(ev工具) > 10) {
+            IO.打印行("  ✓ tools/list 非空");
+        }
+        如果 (字符串::包含(ev工具, "echo") == 1) {
+            IO.打印行("  ✓ 含工具 echo");
+        }
+        如果 (字符串::包含(ev工具, "add") == 1) {
+            IO.打印行("  ✓ 含工具 add");
+        }
+
+        变量 ev资源: 字符串 = MCP列出资源(everything描述符);
+        如果 (字符串::字节长度(ev资源) > 0) {
+            IO.打印行("  ✓ resources/list 有响应 (长度=" + 整数转字符串(字符串::字节长度(ev资源)) + ")");
+        }
+
+        变量 ev提示: 字符串 = MCP列出提示(everything描述符);
+        如果 (字符串::字节长度(ev提示) > 0) {
+            IO.打印行("  ✓ prompts/list 有响应 (长度=" + 整数转字符串(字符串::字节长度(ev提示)) + ")");
+        }
+
+        关闭MCP(everything描述符);
+        IO.打印行("  ✓ 已关闭 server-everything 连接");
+    }
+
+    IO.打印行("");
+    IO.打印行("=== 自测完成 ===");
+}

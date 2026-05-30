@@ -1,0 +1,84 @@
+// _大SSE修复测试.qi — 验证 HTTP 大 SSE 响应修复
+//
+// 测试 browser_evaluate 返回大量数据时不再出现 mcp_no_response
+//
+// 需要先起 Playwright MCP HTTP server:
+//   npx -y @playwright/mcp@latest --port 43528
+//
+// 运行：cd qi-harness && ../target/debug/qi run examples/_大SSE修复测试.qi
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness::{ 连接MCP_http, MCP调用工具, 关闭MCP };
+
+函数 入口() {
+    IO.打印行("=== 大 SSE 响应修复测试 ===");
+    IO.打印行("");
+
+    变量 基址: 字符串 = "http://localhost:43528/mcp";
+    IO.打印行("连接 Playwright MCP " + 基址 + " ...");
+    变量 描述符: 字符串 = 连接MCP_http(基址);
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("✗ 连接失败（请确认：npx -y @playwright/mcp@latest --port 43528）");
+        返回;
+    }
+    IO.打印行("✓ 已连接: " + 描述符);
+    IO.打印行("");
+
+    // 步骤1: 导航到页面
+    IO.打印行("步骤1: browser_navigate https://example.com ...");
+    变量 导航结果: 字符串 = MCP调用工具(描述符, "browser_navigate", "{\"url\":\"https://example.com\"}");
+    IO.打印行("导航结果长度: " + 整数转字符串(字符串::字节长度(导航结果)));
+    如果 (字符串::包含(导航结果, "mcp_no_response") == 1) {
+        IO.打印行("✗ browser_navigate 返回 mcp_no_response");
+        关闭MCP(描述符);
+        返回;
+    }
+    IO.打印行("✓ browser_navigate 成功");
+    IO.打印行("");
+
+    // 步骤2: 大量数据的 browser_evaluate（document.body.innerText 重复50次）
+    // 这正是之前触发 mcp_no_response 的场景
+    IO.打印行("步骤2: browser_evaluate (大数据，innerText.repeat(50))...");
+    变量 大数据结果: 字符串 = MCP调用工具(描述符, "browser_evaluate", "{\"function\":\"() => document.body.innerText.repeat(50)\"}");
+    变量 大数据长度: 整数 = 字符串::字节长度(大数据结果);
+    IO.打印行("大数据响应长度: " + 整数转字符串(大数据长度));
+
+    如果 (字符串::包含(大数据结果, "mcp_no_response") == 1) {
+        IO.打印行("✗ 大 SSE 响应返回 mcp_no_response —— 修复未生效！");
+        关闭MCP(描述符);
+        返回;
+    }
+    如果 (大数据长度 > 100) {
+        IO.打印行("✓ 大 SSE 响应成功（长度=" + 整数转字符串(大数据长度) + "）—— 修复生效！");
+    }
+    如果 (大数据长度 <= 100) {
+        IO.打印行("? 响应较短，可能部分成功（长度=" + 整数转字符串(大数据长度) + "）");
+        IO.打印行("  响应内容: " + 大数据结果);
+    }
+    IO.打印行("");
+
+    // 步骤3: 大数据后会话是否仍存活（browser_snapshot）
+    IO.打印行("步骤3: 验证会话存活 browser_snapshot...");
+    变量 快照结果: 字符串 = MCP调用工具(描述符, "browser_snapshot", "{}");
+    变量 快照长度: 整数 = 字符串::字节长度(快照结果);
+    IO.打印行("快照响应长度: " + 整数转字符串(快照长度));
+    如果 (字符串::包含(快照结果, "mcp_no_response") == 1) {
+        IO.打印行("✗ 大数据后会话中断（browser_snapshot 返回 mcp_no_response）");
+    }
+    如果 (字符串::包含(快照结果, "mcp_no_response") == 0) {
+        如果 (快照长度 > 50) {
+            IO.打印行("✓ 大数据后会话仍存活（快照成功）");
+        }
+        如果 (快照长度 <= 50) {
+            IO.打印行("? 快照响应异常短，长度=" + 整数转字符串(快照长度));
+        }
+    }
+
+    关闭MCP(描述符);
+    IO.打印行("✓ 已关闭连接");
+    IO.打印行("");
+    IO.打印行("=== 大 SSE 修复测试完成 ===");
+}
