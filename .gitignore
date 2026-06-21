@@ -8,3 +8,7 @@ examples/工具助手
 .playwright-mcp/
 examples/seo审计/服务
 examples/seo审计/seo命令行
+
+# 运行产物
+*.db
+examples/qi_packages/
