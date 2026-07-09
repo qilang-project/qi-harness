@@ -289,6 +289,37 @@ token、设上限、超限即判定停——防 agent 循环跑飞烧钱。
 ```
 每次应答/转交打 `handoff` trace。演示：`qi run examples/多代理_分诊.qi`（需 LLM）
 
+## 护栏（注入防御 / PII 脱敏 / 输出守卫 / 工具参数策略）
+
+文件沙箱只管住了文件工具；面向用户的 agent 还需要几道安全护栏（工具层强制，模型绕不过）：
+
+```qi
+导入 Harness.护栏::{检测注入, 脱敏, 校验输出, 工具参数放行, 守卫运行};
+
+如果 (检测注入(用户输入) == 1) { 拒绝; }        // 挡"忽略以上指令/你现在是…"越权改写
+变量 干净 = 脱敏(回复);                          // 邮箱/手机/长号码 → [邮箱][手机][号码]
+校验输出(输出, 必需字段);                         // 输出必须是含指定字段的合法 JSON
+工具参数放行(参数JSON, 拒绝词表);                 // 挡 "DROP TABLE" / "../" / "rm -rf" 等
+
+// 一步到位：入口挡注入 + 出口脱敏，套在 代理.运行 外
+变量 回复 = 守卫运行(代理值, 用户输入);
+```
+演示：`qi run examples/护栏_测.qi`（离线 12/12）
+
+## 可观测：OTLP 导出
+
+span 除了打 stderr/文件，还能导到 **OpenTelemetry collector**（Jaeger / Tempo / Grafana / Langfuse）：
+
+```qi
+导入 Harness.追踪::{设置OTLP, 新追踪, 开始跨度, 结束跨度};
+新追踪();
+设置OTLP("http://localhost:4318");    // 每个完成的 span POST 到 {基址}/v1/traces
+变量 s = 开始跨度("llm", "助手", "调模型", 0);
+结束跨度(s, "助手", "llm", "返回", 1234, 0);   // → 标准 OTLP resourceSpans JSON
+```
+trace_id 32-hex、span_id 16-hex、纳秒时间戳、attributes(agent/tokens/cost)——标准 OTLP/HTTP，
+真实 collector 直接可摄入。
+
 ## 文件系统工具（沙箱 + 权限）
 
 harness 不内置裸文件 tool（fs 无沙箱 = agent 拿到进程全部权限，prompt 注入即可读 `~/.ssh` / 删库）。
