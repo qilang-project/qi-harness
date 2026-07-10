@@ -1,0 +1,22 @@
+// 多模态图像输入 —— 大模型.对话图像(会话, 提示, 图像URL)。
+//
+// 走 OpenAI 兼容视觉模型（如 qwen3-vl-plus），按会话 provider 构造带图消息：
+// openai: content 数组 image_url 块 / anthropic: image+source(url) / gemini: file_data。
+// 环境变量：QI_CHAT_URL / QI_CHAT_KEY + QI_VL_MODEL（视觉模型名）。
+包 主程序;
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.大模型 作为 大模型;
+
+函数 入口() {
+    变量 会话: 整数 = 大模型.创建会话(
+        系统.获取环境变量("QI_CHAT_URL"),
+        系统.获取环境变量("QI_VL_MODEL"),
+        系统.获取环境变量("QI_CHAT_KEY"));
+
+    变量 图URL: 字符串 = "https://dummyimage.com/100x100/ff0000/ff0000.png";
+    变量 回答: 字符串 = 大模型.对话图像(会话, "这张图什么颜色?只答颜色", 图URL);
+    IO.打印行("【图像问答】" + 回答);
+
+    大模型.关闭会话(会话);
+}
