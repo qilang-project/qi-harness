@@ -1,0 +1,65 @@
+// qi-harness · MCP 服务端示例
+//
+// 把两个本地 Harness 工具（add / echo）暴露成 stdio MCP server，任何 MCP 客户端
+// （Claude Desktop、别的 agent、本仓的 MCP客户端.qi）都能 initialize → tools/list →
+// tools/call 调用它。
+//
+// 编译成可执行文件（stdout 干净，只走 JSON-RPC）：
+//   QI_PACKAGES_PATH=/abs/qi_packages qi compile examples/MCP服务示例.qi -o /tmp/mcp服务示例
+// 运行（前台阻塞，读 stdin JSON-RPC）：
+//   /tmp/mcp服务示例
+// 或直接手测：
+//   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+//     '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+//     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add","arguments":{"a":2,"b":40}}}' \
+//     | /tmp/mcp服务示例
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness.工具::{ 工具 };
+导入 Harness.MCP服务::{ MCP服务, 创建MCP服务, 服务注册工具, 运行MCP服务 };
+
+// 工具 1：加法 —— arguments = {"a": <int>, "b": <int>}，返回 a+b 的文本
+函数 加法(参数JSON: 字符串) : 字符串 {
+    变量 对象: 整数 = J.解码(参数JSON);
+    如果 (对象 <= 0) {
+        返回 "参数解析失败";
+    }
+    变量 a: 整数 = J.获取整数(对象, "a");
+    变量 b: 整数 = J.获取整数(对象, "b");
+    返回 整数转字符串(a + b);
+}
+
+// 工具 2：回声 —— arguments = {"text": "<str>"}，返回 "echo: <str>"
+函数 回声(参数JSON: 字符串) : 字符串 {
+    变量 对象: 整数 = J.解码(参数JSON);
+    如果 (对象 <= 0) {
+        返回 "参数解析失败";
+    }
+    变量 文本值: 字符串 = J.获取字符串(对象, "text");
+    返回 "echo: " + 文本值;
+}
+
+函数 入口() {
+    变量 服务: MCP服务 = 创建MCP服务("qi-harness 示例服务", "1.0.0");
+
+    服务 = 服务注册工具(服务, 新建 工具 {
+        名字: "add",
+        描述: "两个整数相加，返回它们的和。",
+        参数schema: "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\",\"description\":\"加数\"},\"b\":{\"type\":\"integer\",\"description\":\"被加数\"}},\"required\":[\"a\",\"b\"]}",
+        处理: 加法,
+    });
+
+    服务 = 服务注册工具(服务, 新建 工具 {
+        名字: "echo",
+        描述: "原样回显传入的文本。",
+        参数schema: "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"要回显的文本\"}},\"required\":[\"text\"]}",
+        处理: 回声,
+    });
+
+    // 阻塞主循环：读 stdin JSON-RPC，写 stdout 响应，直到 EOF
+    运行MCP服务(服务);
+}

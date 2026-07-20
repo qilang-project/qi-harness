@@ -1,0 +1,53 @@
+// qi-harness · MCP 客户端 ↔ 服务端 往返测
+//
+// 用本仓已有的 MCP客户端.qi 去连接、列举、调用 MCP服务示例.qi 编译出的 stdio server，
+// 端到端证明「Qi 写的 MCP server」能被「Qi 写的 MCP client」（以及任何标准 MCP 客户端）
+// 互操作。
+//
+// 前置：先把服务端编译成可执行文件
+//   QI_PACKAGES_PATH=/abs/qi_packages qi compile examples/MCP服务示例.qi -o /tmp/mcp服务示例
+// 运行本测（server 命令默认 /tmp/mcp服务示例，可用环境变量 MCP_SERVER_BIN 覆盖）：
+//   QI_PACKAGES_PATH=/abs/qi_packages qi run examples/MCP服务_往返测.qi
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.操作系统 作为 系统;
+导入 Harness.MCP客户端::{ 连接MCP_stdio, MCP列出工具, MCP调用工具, 关闭MCP };
+
+函数 入口() {
+    变量 服务命令: 字符串 = 系统.获取环境变量("MCP_SERVER_BIN");
+    如果 (字符串::字节长度(服务命令) == 0) {
+        服务命令 = "/tmp/mcp服务示例";
+    }
+
+    IO.打印行("=== 连接 MCP server: " + 服务命令 + " ===");
+    // 空参数数组：直接把可执行文件当 stdio server 启动
+    变量 描述符: 字符串 = 连接MCP_stdio(服务命令, "[]");
+    如果 (字符串::字节长度(描述符) == 0) {
+        IO.打印行("连接失败");
+        返回;
+    }
+    IO.打印行("已连接: " + 描述符);
+
+    IO.打印行("");
+    IO.打印行("=== tools/list ===");
+    变量 工具们: 字符串 = MCP列出工具(描述符);
+    IO.打印行(工具们);
+
+    IO.打印行("");
+    IO.打印行("=== tools/call add {a:2,b:40} ===");
+    变量 结果1: 字符串 = MCP调用工具(描述符, "add", "{\"a\":2,\"b\":40}");
+    IO.打印行(结果1);
+
+    IO.打印行("");
+    IO.打印行("=== tools/call echo {text:\"你好 MCP\"} ===");
+    变量 结果2: 字符串 = MCP调用工具(描述符, "echo", "{\"text\":\"你好 MCP\"}");
+    IO.打印行(结果2);
+
+    IO.打印行("");
+    IO.打印行("=== 关闭 ===");
+    关闭MCP(描述符);
+    IO.打印行("完成");
+}

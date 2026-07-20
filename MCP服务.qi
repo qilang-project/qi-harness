@@ -1,0 +1,93 @@
+// MCP 服务端 — 把 Harness 工具暴露成 MCP 工具，供任意外部 MCP 客户端调用
+//
+// 与 MCP客户端.qi 对称：客户端「连接别人的 server」，本模块「把自己变成 server」。
+// 传输 = stdio + newline-delimited JSON-RPC 2.0（与 MCP客户端 读写的帧格式一致，
+// 因此本 server 能被 MCP客户端 直接往返调用）。
+//
+// 底层复用编译器内置的 `标准库.MCP服务器` Rust 核心（qi_mcp_serve_stdio 主循环，
+// 已实现 initialize / notifications/initialized / tools/list / tools/call +
+// 完整 JSON-RPC 错误响应），本模块只做一层薄封装：把 Harness 的 `工具` 值
+// （名字 / 描述 / 参数schema / 处理）注册进去，工具的 参数schema 原样作为 MCP
+// inputSchema，工具的 处理(参数JSON):字符串 作为 tools/call 的回调。
+//
+// 公开 API：
+//   创建MCP服务(名称, 版本)     : MCP服务
+//   服务注册工具(服务, 工具值)   : MCP服务   （复用 工具.qi 的 工具 类型）
+//   运行MCP服务(服务)                       （阻塞：读 stdin，写 stdout，直到 EOF）
+//   关闭MCP服务(服务)          : 整数        （释放 Rust 侧服务器句柄）
+//
+// 用法（一个 stdio MCP server 程序）：
+//   变量 服务: MCP服务 = 创建MCP服务("我的服务", "1.0.0");
+//   服务 = 服务注册工具(服务, 新建 工具 { 名字: "add", 描述: "两数相加",
+//       参数schema: "{\"type\":\"object\",\"properties\":{...}}", 处理: 加法 });
+//   运行MCP服务(服务);   // 阻塞，直到客户端关闭 stdin
+
+包 Harness;
+
+导入 标准库.字符串;
+导入 标准库.MCP服务器 作为 核心服务;
+导入 标准库.输入输出 作为 IO;
+导入 Harness.工具::{ 工具 };
+
+// MCP 服务描述符 —— 仅封装 Rust 服务器池里的 server_id
+公开 类型 MCP服务 {
+    句柄: 整数,          // qi_mcp_create_server 返回的 server_id（>0 有效）
+}
+
+// ——— 创建服务 ———
+
+// 创建一个 MCP 服务（尚未开始监听）。名称/版本会通过 initialize 的 serverInfo
+// 回给客户端。成功时 句柄 > 0；失败时 句柄 <= 0。
+公开 函数 创建MCP服务(名称: 字符串, 版本: 字符串) : MCP服务 {
+    变量 id: 整数 = 核心服务.创建服务器(名称, 版本, "");
+    如果 (id <= 0) {
+        IO.打印行("[MCP服务] 创建失败");
+    }
+    返回 新建 MCP服务 {
+        句柄: id,
+    };
+}
+
+// ——— 注册工具 ———
+
+// 把一个 Harness 工具暴露成 MCP 工具：
+//   - name         = 工具值.名字
+//   - description  = 工具值.描述
+//   - inputSchema  = 工具值.参数schema（原样作为完整 JSON Schema）
+//   - tools/call   → 工具值.处理(arguments JSON) → 结果文本，包成 content[type=text]
+// 返回同一个服务描述符（便于链式调用）。
+公开 函数 服务注册工具(服务: MCP服务, 工具值: 工具) : MCP服务 {
+    变量 id: 整数 = 服务.句柄;
+    如果 (id <= 0) {
+        返回 服务;
+    }
+    // 1) 注册工具（名字 + 描述）
+    核心服务.注册工具(id, 工具值.名字, 工具值.描述);
+    // 2) 原样安装完整 inputSchema（覆盖 Rust 侧按参数重建的 schema）
+    核心服务.设置工具schema(id, 工具值.名字, 工具值.参数schema);
+    // 3) 安装 Qi 闭包回调：tools/call 时 Rust 主循环直接调 工具值.处理
+    核心服务.设置工具回调指针(id, 工具值.名字, 工具值.处理);
+    返回 服务;
+}
+
+// ——— 运行（阻塞）———
+
+// 启动 stdio JSON-RPC 2.0 主循环：从 stdin 逐行读请求、派发、把响应写到 stdout，
+// 一切诊断信息走 stderr。阻塞直到 stdin EOF（客户端关闭连接）。
+公开 函数 运行MCP服务(服务: MCP服务) {
+    如果 (服务.句柄 <= 0) {
+        IO.打印行("[MCP服务] 无效服务，无法运行");
+        返回;
+    }
+    核心服务.运行stdio(服务.句柄);
+}
+
+// ——— 关闭 ———
+
+// 释放 Rust 侧服务器句柄（运行结束后可选调用）。成功返回 0。
+公开 函数 关闭MCP服务(服务: MCP服务) : 整数 {
+    如果 (服务.句柄 <= 0) {
+        返回 -1;
+    }
+    返回 核心服务.销毁服务器(服务.句柄);
+}
