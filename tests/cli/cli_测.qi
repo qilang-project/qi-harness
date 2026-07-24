@@ -1,0 +1,60 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness.命令行::{CLI会话数据库路径, CLI提供商就绪, CLI嵌入就绪, CLIMCP就绪,
+    CLI诊断JSON, CLI列出会话JSON, CLI恢复信息JSON};
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 创建持久会话, 追加用户消息,
+    当前会话叶, 当前会话路径};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    通过 = 通过 + 断言(字符串::等于(CLI会话数据库路径("/tmp/explicit.db"), "/tmp/explicit.db"),
+                         "explicit_db_path_wins");
+    通过 = 通过 + 断言(CLI提供商就绪("https://example.invalid/v1", "key", "model", "", "") == 1,
+                         "chat_provider_ready");
+    通过 = 通过 + 断言(CLI提供商就绪("", "", "", "key", "") == 1,
+                         "generic_provider_ready");
+    通过 = 通过 + 断言(CLI提供商就绪("", "", "", "", "") == 0,
+                         "missing_provider_rejected");
+    通过 = 通过 + 断言(CLI嵌入就绪("url", "key", "model") == 1, "embedding_ready");
+    通过 = 通过 + 断言(CLI嵌入就绪("url", "", "model") == 0, "embedding_partial_rejected");
+    通过 = 通过 + 断言(CLIMCP就绪("command", "") == 1, "mcp_command_ready");
+    通过 = 通过 + 断言(CLIMCP就绪("", "url") == 1, "mcp_url_ready");
+    变量 诊断: 整数 = J.解码(CLI诊断JSON("url", "secret", "model", "", "", "", "",
+        "", "", "", "command", "", 1));
+    通过 = 通过 + 断言(J.获取布尔(J.获取对象(诊断, "chat"), "ready") == 1,
+                         "diagnostics_chat_ready");
+    通过 = 通过 + 断言(字符串::包含(J.转字符串(诊断), "secret") == 0,
+                         "diagnostics_redacts_values");
+
+    变量 数据库路径: 字符串 = "/tmp/qi_harness_cli_test.db";
+    如果 (IO.文件存在(数据库路径) == 1) { IO.删除文件(数据库路径); }
+    变量 库: 整数 = 打开会话存储(数据库路径);
+    创建持久会话(库, "session-'quoted");
+    追加用户消息(库, "session-'quoted", "hello");
+    变量 会话组: 整数 = J.解码(CLI列出会话JSON(库));
+    通过 = 通过 + 断言(J.数组长度(会话组) == 1, "session_list_count");
+    变量 首会话: 整数 = J.数组获取对象(会话组, 0);
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(首会话, "session_id"), "session-'quoted"),
+                         "session_list_id");
+    通过 = 通过 + 断言(J.获取整数(首会话, "entry_count") == 1, "session_list_entry_count");
+    变量 恢复信息: 整数 = J.解码(CLI恢复信息JSON("session-'quoted", 当前会话叶(库, "session-'quoted"),
+        当前会话路径(库, "session-'quoted")));
+    通过 = 通过 + 断言(J.获取整数(恢复信息, "restorable_message_count") == 1,
+                         "restore_info_count");
+    通过 = 通过 + 断言(字符串::包含(J.转字符串(恢复信息), "hello") == 0,
+                         "restore_info_omits_content");
+    关闭会话存储(库);
+    IO.删除文件(数据库路径);
+
+    如果 (通过 == 15) { IO.打印行("PASS cli_total_15"); }
+    否则 { IO.打印行("FAIL cli_total=" + 整数转字符串(通过)); }
+}

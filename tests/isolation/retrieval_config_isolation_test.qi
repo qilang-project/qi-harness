@@ -1,0 +1,48 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness.检索::{
+    创建检索配置, 检索配置有效, 检索配置端点, 检索配置密钥, 检索配置模型,
+    关闭检索配置, 配置检索, 关闭检索
+};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) {
+        IO.打印行("PASS " + 名字);
+        返回 1;
+    }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    变量 配置甲: 整数 = 创建检索配置("fixture://embed-a", "key-a", "model-a");
+    变量 配置乙: 整数 = 创建检索配置("fixture://embed-b", "key-b", "model-b");
+
+    通过 = 通过 + 断言(配置甲 != 配置乙, "retrieval_handles_distinct");
+    通过 = 通过 + 断言(检索配置有效(配置甲) == 1, "retrieval_config_a_valid");
+    通过 = 通过 + 断言(检索配置有效(配置乙) == 1, "retrieval_config_b_valid");
+    通过 = 通过 + 断言(字符串::等于(检索配置端点(配置甲), "fixture://embed-a"), "config_a_endpoint");
+    通过 = 通过 + 断言(字符串::等于(检索配置密钥(配置甲), "key-a"), "config_a_key");
+    通过 = 通过 + 断言(字符串::等于(检索配置模型(配置甲), "model-a"), "config_a_model");
+    通过 = 通过 + 断言(字符串::等于(检索配置端点(配置乙), "fixture://embed-b"), "config_b_endpoint");
+    通过 = 通过 + 断言(字符串::等于(检索配置密钥(配置乙), "key-b"), "config_b_key");
+    通过 = 通过 + 断言(字符串::等于(检索配置模型(配置乙), "model-b"), "config_b_model");
+
+    // Legacy default configuration changes must not mutate explicit immutable handles.
+    配置检索("fixture://legacy", "legacy-key", "legacy-model");
+    关闭检索();
+    通过 = 通过 + 断言(字符串::等于(检索配置端点(配置甲), "fixture://embed-a"), "legacy_does_not_change_config_a");
+    通过 = 通过 + 断言(字符串::等于(检索配置端点(配置乙), "fixture://embed-b"), "legacy_does_not_change_config_b");
+    通过 = 通过 + 断言(检索配置有效(0 - 1) == 0, "invalid_config_rejected");
+    通过 = 通过 + 断言(关闭检索配置(配置甲) == 1, "explicit_config_close");
+    通过 = 通过 + 断言(检索配置有效(配置甲) == 0, "closed_config_invalid");
+    通过 = 通过 + 断言(检索配置有效(配置乙) == 1, "closing_config_a_keeps_config_b");
+    通过 = 通过 + 断言(字符串::等于(检索配置模型(配置乙), "model-b"), "closing_config_a_keeps_config_b_values");
+    关闭检索配置(配置乙);
+
+    如果 (通过 == 16) { IO.打印行("PASS retrieval_config_isolation_total_16"); }
+    否则 { IO.打印行("FAIL retrieval_config_isolation_total=" + 整数转字符串(通过)); }
+}

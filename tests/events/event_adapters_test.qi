@@ -1,0 +1,87 @@
+包 主程序;
+
+导入 标准库.JSON 作为 J;
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.列表 作为 列表库;
+导入 Harness.事件::{清空生命周期订阅者, 发出生命周期事件};
+导入 Harness.追踪::{启用, 启用即时打印, 设置输出文件, 安装生命周期追踪适配器};
+导入 Harness.报告::{安装生命周期报告适配器, 步骤数, 报告总令牌, 报告总成本, 报告JSON};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) {
+        IO.打印行("PASS " + 名字);
+        返回 1;
+    }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    变量 路径: 字符串 = "/tmp/qi_event_adapter_trace.jsonl";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+
+    清空生命周期订阅者();
+    启用();
+    启用即时打印();
+    设置输出文件(路径);
+    发出生命周期事件("not-installed", "", "", "agent_start", "tester", "{}");
+    通过 = 通过 + 断言(IO.文件存在(路径) == 0, "adapters_are_opt_in");
+    安装生命周期追踪适配器();
+    安装生命周期报告适配器("adapter-test");
+
+    发出生命周期事件("run-fixed", "turn-1", "step-1", "llm_start", "tester",
+                     "{\"name\":\"first\"}");
+    发出生命周期事件("run-fixed", "turn-1", "step-1", "llm_end", "tester",
+                     "{\"detail\":\"answer\",\"tokens\":7,\"prompt_tokens\":4,\"completion_tokens\":3,\"cost\":2}");
+    发出生命周期事件("run-fixed", "turn-1", "step-2", "tool_start", "tester",
+                     "{\"name\":\"second\"}");
+    发出生命周期事件("run-fixed", "turn-1", "step-2", "tool_end", "tester",
+                     "{\"detail\":\"result\",\"tokens\":5,\"cost\":3}");
+    发出生命周期事件("run-fixed", "turn-1", "step-3", "llm_start", "tester",
+                     "{\"name\":\"outer\"}");
+    发出生命周期事件("run-fixed", "turn-1", "step-3", "retry_start", "tester",
+                     "{\"name\":\"retry\",\"attempt\":2}");
+    发出生命周期事件("run-fixed", "turn-1", "step-3", "retry_end", "tester",
+                     "{\"result\":\"success\"}");
+    发出生命周期事件("run-fixed", "turn-1", "step-3", "llm_end", "tester",
+                     "{\"tokens\":1}");
+
+    变量 追踪文本: 字符串 = IO.读取文件(路径);
+    变量 追踪行: 整数 = 字符串::分割(字符串::去空白(追踪文本), "\n");
+    通过 = 通过 + 断言(列表库::字符串列表大小(追踪行) == 8, "trace_one_line_per_event");
+    变量 首追踪: 整数 = J.解码(列表库::获取字符串(追踪行, 0));
+    通过 = 通过 + 断言(首追踪 > 0, "trace_json_valid");
+    通过 = 通过 + 断言(字符串::包含(追踪文本, "\"trace\":\"run-fixed\"") == 1, "trace_run_id");
+    通过 = 通过 + 断言(字符串::包含(追踪文本, "\"turn\":\"turn-1\"") == 1, "trace_turn_id");
+    通过 = 通过 + 断言(字符串::包含(追踪文本, "\"type\":\"tool_end\"") == 1, "trace_type");
+
+    通过 = 通过 + 断言(步骤数() == 4, "report_step_count");
+    通过 = 通过 + 断言(报告总令牌() == 13, "report_tokens");
+    通过 = 通过 + 断言(报告总成本() == 5, "report_cost");
+    变量 报告根: 整数 = J.解码(报告JSON());
+    变量 步骤组: 整数 = J.获取数组(报告根, "步骤");
+    变量 首项: 整数 = J.数组获取对象(步骤组, 0);
+    变量 次项: 整数 = J.数组获取对象(步骤组, 1);
+    变量 三项: 整数 = J.数组获取对象(步骤组, 2);
+    变量 四项: 整数 = J.数组获取对象(步骤组, 3);
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(首项, "名字"), "first"), "report_first_order");
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(次项, "名字"), "second"), "report_second_order");
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(首项, "种类"), "llm"), "report_first_kind");
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(次项, "种类"), "tool"), "report_second_kind");
+    通过 = 通过 + 断言(J.获取整数(首项, "提示令牌") == 4, "report_prompt_tokens");
+    通过 = 通过 + 断言(J.获取整数(首项, "补全令牌") == 3, "report_completion_tokens");
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(三项, "种类"), "llm")
+        && 字符串::等于(J.获取字符串(四项, "种类"), "retry"),
+        "report_nested_event_kinds");
+    通过 = 通过 + 断言(J.获取整数(三项, "令牌") == 1,
+        "report_nested_llm_closed_independently");
+    J.删除(报告根);
+
+    设置输出文件("");
+    清空生命周期订阅者();
+    IO.删除文件(路径);
+    如果 (通过 == 17) { IO.打印行("PASS event_adapters_total_17"); }
+    否则 { IO.打印行("FAIL event_adapters_total=" + 整数转字符串(通过)); }
+}

@@ -23,10 +23,11 @@ metadata:
 一行 builder 配置任何 OpenAI 兼容端点（DeepSeek、OpenAI、本地 …）：
 
 ```qi
-导入 Harness::{ 模型配置, 大模型, 配置系统提示, 开启会话, 关闭会话Harness };
+导入 Harness::{ 模型配置, 大模型, 配置系统提示, 配置超时, 开启会话, 关闭会话Harness };
 
 变量 配置: 模型配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
 配置 = 配置系统提示(配置, "你是简洁的中文助手。");
+配置 = 配置超时(配置, 60);
 // 可选：配置温度(配置, "0.7")、配置最大令牌(配置, 2048)
 变量 会话: 整数 = 开启会话(配置);   // >0 成功
 // 用完：关闭会话Harness(会话)  —— 注意是 关闭会话Harness，不是 关闭会话
@@ -41,15 +42,35 @@ metadata:
 
 变量 代理值: 代理 = 创建代理("助手", 会话);
 
+// 非流式调用默认最多尝试 3 次（首次调用计入）；可用 设置重试策略 覆盖。
+
 // 1. 一次性问答（无工具）
 变量 回复: 字符串 = 简单问(代理值, "用一句话介绍 qi 语言");
 
-// 2. 流式问答 —— 块回调签名固定 函数(字符串): 整数（返回 1 继续）
+// 2. 流式问答 —— 块回调签名固定 函数(字符串): 整数
 函数 打印片段(片段: 字符串) : 整数 { IO.打印(片段); 返回 1; }
 变量 完整: 字符串 = 流式问(代理值, "解释 LLVM", 打印片段);
 
 关闭代理(代理值);
 ```
+
+当前流式实现会忽略块回调的整数返回值，返回 `0` 也不会取消流。`流式运行` 遇到同一批多个工具调用时
+固定按顺序串行执行，不使用非流式 `运行` 的并发批处理。
+
+跨会话 token/成本预算可以附加到代理。成功的非流式请求会自动累计真实 usage，达到上限后
+下一次调用在请求 provider 前返回 `[harness] budget_exceeded`：
+
+```qi
+导入 Harness::{附加预算};
+导入 Harness.预算::{创建预算, 预算报告};
+
+变量 预算 = 创建预算(100000, 0);
+代理值 = 附加预算(代理值, 预算);
+变量 回复 = 简单问(代理值, "分析这份资料");
+IO.打印行(预算报告(预算));
+```
+
+> 自动重试和自动预算目前只覆盖非流式调用；流式调用避免在已输出片段后自动重放。
 
 ## 工具调用（自动派发循环）
 
@@ -66,12 +87,12 @@ metadata:
     // ... 开启会话 ...
     变量 代理值: 代理 = 创建代理("天气助手", 会话);
 
-    变量 天气工具: 工具 = (工具 {
+    变量 天气工具: 工具 = 新建 工具 {
         名字: "天气查询",
         描述: "查询城市天气。",
         参数schema: "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}",
         处理: 天气查询,
-    });
+    };
     代理值 = 添加工具(代理值, 天气工具);
 
     // 运行：自动 detect tool_calls → 派发 → 回写结果 → 继续，直到模型给最终文本
@@ -81,7 +102,18 @@ metadata:
 }
 ```
 
-`运行` 内部循环支持 **parallel tool_calls**：模型一轮返回多个工具调用时，逐个派发并各自 `回写工具结果`，再 `继续工具对话`。`设置最大步数(代理, N)` 防止无限循环（默认 10）。
+`运行` 支持 **parallel tool_calls**。本地工具默认并发，MCP 固定串行；一批调用只有在全部已放行且
+都是本地并发工具时才整批并发，否则整批串行。结果按原 ToolCall 顺序回写。
+`设置最大步数(代理, N)` 防止无限循环（默认 10）。
+
+```qi
+导入 Harness.工具::{设置执行模式, 设置工具钩子, 工具成功, 工具错误};
+代理值.工具表 = 设置执行模式(代理值.工具表, "天气查询", 1); // 0 并发，1 串行
+代理值.工具表 = 设置工具钩子(代理值.工具表, "天气查询", 前钩子, 后钩子);
+```
+
+本地派发只验证参数和 before hook 输出是 JSON 对象，不执行完整 JSON Schema。`工具成功` /
+`工具错误` 是可选标准 JSON helper，原始字符串结果不会自动包装。取消、进度、超时和 panic 隔离未实现。
 
 ## 技能（agentskills.io）
 
@@ -134,7 +166,7 @@ qi-harness **内置 MCP 客户端**（stdio + Streamable HTTP），把外部 MCP
 
 ## 结构化输出
 
-三条路子：① 语言级原语 `询问::<T>`（类型即 schema，最省事，见 qi-lang 大模型参考）；② agent 层 `结构化运行(代理值, 提示, 必需字段)`（json_object + 字段校验，返回 JSON 串）；③ `结构化运行严格(代理值, 提示, schema串)`（发 strict json_schema）。`对话.校验JSON对象(JSON文本, 必需字段)` 单独校验必填。
+三条路子：① 语言级原语 `询问::<T>`（类型即 schema，见 qi-lang 大模型参考）；② agent 层 `结构化运行(代理值, 提示, 必需字段)`（json_object + 本地合法对象/顶层字段校验 + 纠正循环）；③ `结构化运行严格(代理值, 提示, schema串)`（仅把 strict json_schema 交给 provider，一次调用后原样返回）。严格路径当前没有本地 JSON Schema 验证或纠正循环。`对话.校验JSON对象(JSON文本, 必需字段)` 可单独校验顶层必填。
 
 ## 真实 token 用量 与 预算
 
@@ -170,17 +202,21 @@ IO.打印行(预算报告(预算));
 ## 向量记忆 与 RAG 检索
 
 ```qi
-// 语义记忆（Rust 内存精确 top-K）
+// 语义记忆（内存精确 top-K；无固定性能承诺，按实际数据量基准测试）
 导入 Harness.向量记忆::{ 打开向量库, 语义记住, 语义回忆, 向量记忆条数, 关闭向量库 };
 
 // RAG：加载→分块→双索引→混合召回(向量+词法)→可选 LLM 重排
 导入 Harness.文档::{ 加载文本, 分块, HTML转文本 };
-导入 Harness.检索::{ 配置检索, 索引文档, 检索, 混合检索, 取文档内容, 关闭检索 };
+导入 Harness.检索::{ 创建检索配置, 索引文档按配置, 检索按配置, 关闭检索配置 };
 
-配置检索(嵌入端点, 嵌入密钥, 嵌入模型);
-变量 入数 = 索引文档(库, 库, 全文, 400, 80);          // 块大小 400 字节 / 重叠 80
-变量 命中表 = 检索(库, 库, 会话, 查询, 6, 3);           // 召回 6 → LLM 重排取 top-3
+变量 检索配置 = 创建检索配置(嵌入端点, 嵌入密钥, 嵌入模型);
+变量 入数 = 索引文档按配置(检索配置, 库, 库, 全文, 400, 80);
+变量 命中表 = 检索按配置(检索配置, 库, 库, 会话, 查询, 6, 3);
+关闭检索配置(检索配置);
 ```
+
+显式配置句柄可隔离不同 embedding 配置；旧 `配置检索`/`索引文档`/`检索` API 使用进程级默认配置，
+并发或多租户代码应优先用 `*按配置` API。
 
 agent 也可 `启用记忆(代理值, 库路径)` + `带记忆运行(代理值, 提示, 查询关键词)` 自动把回忆注入上下文，`提炼经验(...)` 把结果沉淀回记忆库。
 
@@ -201,20 +237,66 @@ g = 添加边(g, "处理", 终点());
 变量 结果 = 运行图带检查点(g, 库, "任务001", "问", "{}", 50);  // (图,库,运行ID,起点,初始状态,最大步数)
 如果 (是中断(结果) == 1) {                       // 节点可发起中断问人工
     // …拿到人工回复后…
-    结果 = 恢复图(库, g, "任务001", 50, 人工回复);  // 从检查点续跑
+    结果 = 恢复图(g, 库, "任务001", 人工回复);  // 从检查点续跑
 }
 ```
 
 `有检查点(库, 运行ID)` 查是否有未完成运行；完成后检查点自动清除。崩溃续跑用 `运行图持久化`/`恢复运行`（见 `examples/图_崩溃续跑.qi`、`examples/图_检查点HITL.qi`，均无需 LLM）。
+
+## 普通 Agent 的 SQLite 持久会话
+
+持久会话与图检查点是独立模型。普通对话使用 append-only entry 树和当前 leaf：
+
+```qi
+导入 Harness.代理::{代理, 附加会话存储, 恢复持久会话};
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 设置当前会话叶,
+    导出持久会话JSON, 导入持久会话JSON};
+
+变量 库 = 打开会话存储("/tmp/agent-sessions.db");
+变量 代理值: 代理 = 附加会话存储(创建代理("助手", 开启会话(配置)), 库, "session-123");
+变量 回复 = 运行(代理值, "继续任务");
+
+// 新建 runtime 会话或切换 leaf 后显式恢复。
+变量 新代理: 代理 = 附加会话存储(创建代理("助手", 开启会话(配置)), 库, "session-123");
+变量 恢复数 = 恢复持久会话(新代理);
+变量 导出JSON = 导出持久会话JSON(库, "session-123");
+关闭会话存储(库);
+```
+
+附加后，非流式调用记录用户、provider 原始助手消息、工具结果、最终消息和错误。恢复只重放当前
+root-to-leaf 路径中的消息与工具结果。流式调用不自动记录；配置/模型/摘要 entry 不会自动恢复
+Agent 配置。`打开内存会话存储()` 使用 SQLite `:memory:`，关闭唯一句柄后数据消失，并非独立内存 backend。
+版本 1 导入/导出 API 已可用，但存储不负责认证、租户归属或加密。
+
+`创建代理` 接管 runtime 会话，`关闭代理` 会关闭会话和代理自建的重试资源；`附加会话存储` 不接管
+数据库句柄。共享重试资源和 MCP 连接由创建它们的调用方释放或关闭；预算句柄不归 Agent 所有，
+当前没有独立释放 API。调用方负责会话存储和其他共享资源的关闭顺序。
 
 ## 评估 与 护栏
 
 - `Harness.评估`：`创建套件`/`添加测例`/`运行套件(套件, 代理, 裁判会话)`/`平均分百分`/`保存基线JSON`/`基线门禁(套件, 基线路径, 容差百分)`——CI 里跑回归门禁（配 LLM 磁带 REPLAY 确定性）。判分方式含子串匹配与 LLM 裁判。
 - `Harness.护栏`：`检测注入(文本)`（prompt injection）/`脱敏(文本)`（PII）/`校验输出(...)`/`工具参数放行(...)`。
 
-## 追踪（可观测）
+## 生命周期与追踪
 
-每次 LLM 调用、每次工具派发都 emit JSON 事件到 stdout（默认开）：
+非流式 `运行`、`简单问`、`结构化运行` 和 `结构化运行严格` 会发 canonical lifecycle v1：
+`agent_start/end`、`turn_start/end`、`llm_start/end`，以及 `运行` 的 `tool_start/end`。
+总线是进程内同步订阅，按注册顺序交付，不能捕获回调 panic。事件模块支持显式 bus 句柄，但 Agent
+当前固定发到默认 bus，尚不能给单个 Agent 注入自定义 bus；多数 Agent lifecycle payload 仍是空对象。
+
+```qi
+导入 Harness.事件::{订阅生命周期事件, 清空生命周期订阅者};
+导入 Harness.追踪::{安装生命周期追踪适配器};
+导入 Harness.报告::{安装生命周期报告适配器, 文本报告};
+
+安装生命周期追踪适配器();
+安装生命周期报告适配器("任务");
+变量 回复 = 运行(代理值, "完成任务");
+IO.打印行(文本报告());
+清空生命周期订阅者();
+```
+
+trace/report adapters 是 opt-in，避免和 Agent 仍保留的 legacy 直写 trace 重复。旧 trace 开关仍可用：
 
 ```qi
 导入 Harness.追踪 作为 追踪;
@@ -222,7 +304,9 @@ g = 添加边(g, "处理", 终点());
 追踪.禁用();           // 完全关闭追踪
 ```
 
-事件类型：`llm_call` / `llm_response` / `tool_call` / `tool_result` / `error` / `done` / `stream_start` / `stream_chunk` / `stream_end`。
+legacy trace 类型包括 `llm_call` / `llm_response` / `tool_call` / `tool_result` / `error` /
+`done` / `stream_start` / `stream_chunk` / `stream_end`。流式 API 当前只走这套 legacy trace，
+尚未接入 canonical lifecycle。
 
 ## 重试
 
@@ -230,6 +314,65 @@ g = 添加边(g, "处理", 终点());
 导入 Harness::{ 默认策略, 重试调用 };
 // 重试调用(策略, 代理名, 调用) — 调用是 函数(): 字符串，429/网络抖动指数退避重试
 ```
+
+每个 `创建代理` 默认创建独立重试资源（熔断 + 令牌桶）。需要跨 Agent 共享 provider 配额时：
+
+```qi
+导入 Harness::{共享重试资源};
+导入 Harness.重试::{创建重试资源, 配置资源熔断, 配置资源限流};
+变量 资源 = 创建重试资源();
+配置资源熔断(资源, 5, 30000);
+配置资源限流(资源, 10, 20);
+代理值 = 共享重试资源(代理值, 资源);
+```
+
+旧的 `配置熔断` / `配置限流` API 使用共享资源 `0`。自动重试仍只覆盖非流式 provider 调用。
+
+## Run Context
+
+`Harness.运行上下文` 提供显式句柄：`创建运行上下文`、`进入运行上下文`、`退出运行上下文`、
+`取运行ID`、`推进轮次`、`推进步骤`、trace metadata 与 request-scoped 工具键值。非流式 Agent
+运行自动建立并清理 context；工具处理器可继续通过 `Harness.工具上下文` 的兼容 API 读取当前值。
+句柄状态表和 current-context 栈仍是进程内实现。报告已有独立句柄 API；legacy trace sink 和
+兼容无句柄报告 API 仍保留进程级默认状态。
+
+## 最小 CLI 与 HTTP 适配器
+
+CLI 入口是 `cmd/qi-harness.qi`：
+
+```bash
+qi run cmd/qi-harness.qi -- check
+qi run cmd/qi-harness.qi -- test
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session list
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session show session-123
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session path session-123
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session export session-123 session.json
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session import session.json
+qi run cmd/qi-harness.qi -- --db /tmp/sessions.db session branch session-123 entry-456
+```
+
+它只做 provider 环境诊断、显示 `./run-offline-tests.sh` 命令，以及 SQLite 会话查看、版本 1 导入导出和
+移动 current leaf 创建后续分支，不是 Agent runner，也不会恢复后继续调用模型。
+
+`Harness.代理服务` 当前提供 `GET /health`、`POST /chat`、`POST /json`。`/chat` 有服务工具时走
+工具循环，无工具时纯问答；`/json` 不装备工具。调用
+`配置服务持久会话(SQLite路径, 默认所有者)` 后，请求使用字符串 `会话ID`，服务每次从 SQLite
+恢复到新 runtime；未知 ID、owner 不匹配和 owner 映射缺失统一为 404。未配置时保留旧整数 `会话号` 协议。
+默认应用层上限为 1 MiB body、256 KiB 提示，检查发生在 Web 已读完整 body 后；`/health` 仅是 liveness，
+不检查 provider/SQLite/MCP readiness。owner 只是相等校验，不是身份认证；配置/工具/DB 仍为模块全局状态，
+也没有关闭会话、流式事件、跨实例并发协调或实例隔离，不能宣传为生产就绪多租户服务。
+
+## 质量门禁与限制
+
+仓库根运行 `./run-offline-tests.sh`。它保留 suite 的非零退出状态，并覆盖当前接入的 diff whitespace、
+语法、离线示例、事件/适配器、工具管道/调度、run context、会话持久化/导入导出/Agent 集成、CLI、
+HTTP 持久会话、文件沙箱/报告/检索隔离和 M1 reliability。GitHub Actions 在 Ubuntu 22.04 与 macOS 14
+运行同一门禁；真实 provider smoke test 不在离线门禁内。
+
+- 自动 retry/usage/budget/lifecycle/session recording 主要覆盖非流式路径。
+- 工具管道无完整 JSON Schema、取消、进度、超时和 panic isolation。
+- lifecycle 有显式 bus，但 Agent 固定使用默认 bus；legacy trace sink、默认报告、服务配置和旧检索兼容 API 仍有进程级默认状态。
+- 文件沙箱、白名单、护栏不是 OS/container 隔离。
 
 ## 底层直连（不用 agent 外壳）
 

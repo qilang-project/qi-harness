@@ -1,0 +1,176 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 标准库.数据库;
+导入 标准库.时间;
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 创建持久会话, 会话存在,
+    追加用户消息, 追加助手消息, 当前会话叶, 设置当前会话叶,
+    当前会话路径, 加载会话条目, 按期望叶追加会话条目,
+    按写栅栏及期望叶追加会话条目, 按写栅栏追加会话条目,
+    回退未完成写栅栏请求};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) {
+        IO.打印行("PASS " + 名字);
+        返回 1;
+    }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 数组条目ID(数组值: 整数, 索引: 整数) : 字符串 {
+    返回 J.获取字符串(J.数组获取对象(数组值, 索引), "entry_id");
+}
+
+函数 入口() {
+    变量 路径: 字符串 = "/tmp/qi_harness_session_persistence_test.db";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+    变量 会话ID: 字符串 = "session-'safe";
+    变量 通过: 整数 = 0;
+
+    变量 库: 整数 = 打开会话存储(路径);
+    通过 = 通过 + 断言(库 > 0, "storage_opened");
+    通过 = 通过 + 断言(创建持久会话(库, 会话ID) == 1, "session_created");
+
+    变量 根: 字符串 = 追加用户消息(库, 会话ID, "root with ' quote");
+    变量 旧二: 字符串 = 追加助手消息(库, 会话ID, "old answer");
+    变量 旧叶: 字符串 = 追加用户消息(库, 会话ID, "old follow-up");
+    通过 = 通过 + 断言(字符串::字节长度(根) > 0 && 字符串::字节长度(旧叶) > 0, "initial_entries_appended");
+
+    变量 旧路径: 整数 = J.解码(当前会话路径(库, 会话ID));
+    通过 = 通过 + 断言(J.数组长度(旧路径) == 3, "root_to_leaf_path_length");
+    通过 = 通过 + 断言(字符串::等于(数组条目ID(旧路径, 0), 根), "path_starts_at_root");
+    通过 = 通过 + 断言(字符串::等于(数组条目ID(旧路径, 1), 旧二), "path_keeps_middle");
+    通过 = 通过 + 断言(字符串::等于(数组条目ID(旧路径, 2), 旧叶), "path_ends_at_leaf");
+
+    通过 = 通过 + 断言(设置当前会话叶(库, 会话ID, 根) == 1, "leaf_moved_to_history");
+    变量 新叶: 字符串 = 追加助手消息(库, 会话ID, "new branch answer");
+    变量 新路径: 整数 = J.解码(当前会话路径(库, 会话ID));
+    通过 = 通过 + 断言(J.数组长度(新路径) == 2, "new_branch_path_length");
+    通过 = 通过 + 断言(字符串::等于(数组条目ID(新路径, 0), 根)
+        && 字符串::等于(数组条目ID(新路径, 1), 新叶), "new_branch_reconstructed");
+
+    变量 全部: 整数 = J.解码(加载会话条目(库, 会话ID));
+    通过 = 通过 + 断言(J.数组长度(全部) == 4, "branching_is_non_destructive");
+    通过 = 通过 + 断言(设置当前会话叶(库, 会话ID, 旧叶) == 1, "old_branch_still_selectable");
+    变量 恢复旧路径: 整数 = J.解码(当前会话路径(库, 会话ID));
+    通过 = 通过 + 断言(J.数组长度(恢复旧路径) == 3
+        && 字符串::等于(数组条目ID(恢复旧路径, 2), 旧叶), "old_branch_retained");
+
+    设置当前会话叶(库, 会话ID, 新叶);
+    关闭会话存储(库);
+    库 = 打开会话存储(路径);
+    通过 = 通过 + 断言(会话存在(库, 会话ID) == 1, "session_persists_after_reopen");
+    通过 = 通过 + 断言(字符串::等于(当前会话叶(库, 会话ID), 新叶), "leaf_persists_after_reopen");
+    变量 重开路径: 整数 = J.解码(当前会话路径(库, 会话ID));
+    变量 重开全部: 整数 = J.解码(加载会话条目(库, 会话ID));
+    通过 = 通过 + 断言(J.数组长度(重开路径) == 2
+        && 字符串::等于(数组条目ID(重开路径, 0), 根)
+        && 字符串::等于(数组条目ID(重开路径, 1), 新叶), "path_persists_after_reopen");
+    通过 = 通过 + 断言(J.数组长度(重开全部) == 4, "old_branch_persists_after_reopen");
+
+    变量 并发叶: 字符串 = 当前会话叶(库, 会话ID);
+    通过 = 通过 + 断言(按期望叶追加会话条目(库, 会话ID, 并发叶,
+        "test.concurrent", "{\"writer\":1}") == 1, "expected_leaf_append_succeeds");
+    通过 = 通过 + 断言(按期望叶追加会话条目(库, 会话ID, 并发叶,
+        "test.concurrent", "{\"writer\":2}") == 0, "stale_expected_leaf_conflicts");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, 会话ID))) == 5,
+        "stale_append_writes_nothing");
+
+    数据库.执行(库, "CREATE TABLE 服务会话请求锁 (会话ID TEXT PRIMARY KEY, "
+        + "所有者令牌 TEXT NOT NULL, 租约到期毫秒 INTEGER NOT NULL, 栅栏 INTEGER NOT NULL)");
+    变量 锁库: 整数 = 数据库.连接(路径);
+    变量 栅栏会话: 字符串 = "fenced-session";
+    创建持久会话(库, 栅栏会话);
+    数据库.执行(锁库, "INSERT INTO 服务会话请求锁 VALUES ('fenced-session', 'old-owner', "
+        + 整数转字符串(时间.当前毫秒() + 60000) + ", 7)");
+    通过 = 通过 + 断言(按写栅栏及期望叶追加会话条目(库, 栅栏会话, "",
+        "old-owner", 7, "test.fenced", "{\"writer\":\"old\"}") == 1,
+        "fenced_append_succeeds_for_current_owner");
+    变量 栅栏叶: 字符串 = 当前会话叶(库, 栅栏会话);
+    数据库.执行(锁库, "UPDATE 服务会话请求锁 SET 所有者令牌 = 'new-owner', 栅栏 = 8, "
+        + "租约到期毫秒 = " + 整数转字符串(时间.当前毫秒() + 60000)
+        + " WHERE 会话ID = 'fenced-session'");
+    通过 = 通过 + 断言(按写栅栏及期望叶追加会话条目(库, 栅栏会话, 栅栏叶,
+        "old-owner", 7, "test.fenced", "{\"writer\":\"stale\"}") == 0,
+        "taken_over_fence_rejects_stale_append");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, 栅栏会话))) == 1
+        && 字符串::等于(当前会话叶(库, 栅栏会话), 栅栏叶) == 1,
+        "stale_fence_writes_no_entry_or_leaf");
+    数据库.执行(锁库, "UPDATE 服务会话请求锁 SET 租约到期毫秒 = "
+        + 整数转字符串(时间.当前毫秒() - 1) + " WHERE 会话ID = 'fenced-session'");
+    通过 = 通过 + 断言(按写栅栏及期望叶追加会话条目(库, 栅栏会话, 栅栏叶,
+        "new-owner", 8, "test.fenced", "{\"writer\":\"expired\"}") == 0,
+        "expired_fence_rejects_append");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, 栅栏会话))) == 1
+        && 字符串::等于(当前会话叶(库, 栅栏会话), 栅栏叶) == 1,
+        "expired_fence_writes_no_entry_or_leaf");
+
+    变量 接管会话: 字符串 = "takeover-session";
+    创建持久会话(库, 接管会话);
+    变量 接管基线: 字符串 = 追加用户消息(库, 接管会话, "committed baseline");
+    数据库.执行(锁库, "INSERT INTO 服务会话请求锁 VALUES ('takeover-session', 'takeover-old', "
+        + 整数转字符串(时间.当前毫秒() + 60000) + ", 11)");
+    通过 = 通过 + 断言(按写栅栏及期望叶追加会话条目(库, 接管会话, 接管基线,
+        "takeover-old", 11, "request.started",
+        "{\"source\":\"service\",\"owner_token\":\"takeover-old\",\"fence\":11}") == 1
+        && 字符串::字节长度(按写栅栏追加会话条目(库, 接管会话,
+            "takeover-old", 11, "message.user", "{\"content\":\"stale\"}")) > 0,
+        "takeover_branch_written");
+    数据库.执行(库, "BEGIN IMMEDIATE");
+    变量 回退结果: 整数 = 回退未完成写栅栏请求(库, 接管会话, "takeover-old", 11);
+    数据库.执行(库, "COMMIT");
+    通过 = 通过 + 断言(回退结果 == 1
+        && 字符串::等于(当前会话叶(库, 接管会话), 接管基线) == 1,
+        "takeover_rolls_back_visible_leaf_to_committed_baseline");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, 接管会话))) == 3,
+        "takeover_keeps_stale_entries_append_only");
+    数据库.执行(锁库, "UPDATE 服务会话请求锁 SET 所有者令牌 = 'takeover-done', 栅栏 = 12, "
+        + "租约到期毫秒 = " + 整数转字符串(时间.当前毫秒() + 60000)
+        + " WHERE 会话ID = 'takeover-session'");
+    变量 完成开始叶: 字符串 = 当前会话叶(库, 接管会话);
+    按写栅栏及期望叶追加会话条目(库, 接管会话, 完成开始叶,
+        "takeover-done", 12, "request.started",
+        "{\"source\":\"service\",\"owner_token\":\"takeover-done\",\"fence\":12}");
+    按写栅栏追加会话条目(库, 接管会话, "takeover-done", 12,
+        "turn.complete", "{\"turn_id\":\"done\"}");
+    变量 完成叶: 字符串 = 当前会话叶(库, 接管会话);
+    数据库.执行(库, "BEGIN IMMEDIATE");
+    变量 完成回退结果: 整数 = 回退未完成写栅栏请求(库, 接管会话, "takeover-done", 12);
+    数据库.执行(库, "COMMIT");
+    通过 = 通过 + 断言(完成回退结果 == 1
+        && 字符串::等于(当前会话叶(库, 接管会话), 完成叶) == 1,
+        "takeover_preserves_completed_request_history");
+    数据库.执行(库, "BEGIN IMMEDIATE");
+    变量 迁移回退结果: 整数 = 回退未完成写栅栏请求(库, 接管会话, "legacy-owner", 0);
+    数据库.执行(库, "COMMIT");
+    通过 = 通过 + 断言(迁移回退结果 == 1
+        && 字符串::等于(当前会话叶(库, 接管会话), 完成叶) == 1,
+        "legacy_zero_fence_takeover_is_noop");
+    数据库.关闭(锁库);
+
+    通过 = 通过 + 断言(数据库.执行(库, "BEGIN IMMEDIATE") >= 0, "outer_transaction_started");
+    通过 = 通过 + 断言(字符串::字节长度(追加用户消息(库, 会话ID, "must not append")) == 0,
+        "begin_failure_is_reported");
+    数据库.执行(库, "ROLLBACK");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, 会话ID))) == 5,
+        "begin_failure_writes_nothing");
+
+    创建持久会话(库, "commit-failure");
+    数据库.执行(库, "CREATE TABLE 延迟父 (id TEXT PRIMARY KEY)");
+    数据库.执行(库, "CREATE TABLE 延迟子 (id TEXT, FOREIGN KEY(id) REFERENCES 延迟父(id) DEFERRABLE INITIALLY DEFERRED)");
+    数据库.执行(库, "CREATE TRIGGER 注入提交失败 AFTER UPDATE OF 当前叶 ON 持久会话 "
+        + "WHEN NEW.会话ID = 'commit-failure' BEGIN INSERT INTO 延迟子(id) VALUES ('missing'); END");
+    通过 = 通过 + 断言(字符串::字节长度(追加用户消息(库, "commit-failure", "must roll back")) == 0,
+        "commit_failure_is_reported");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(库, "commit-failure"))) == 0
+        && 字符串::字节长度(当前会话叶(库, "commit-failure")) == 0,
+        "commit_failure_rolls_back_entry_and_leaf");
+
+    关闭会话存储(库);
+    IO.删除文件(路径);
+    如果 (通过 == 35) { IO.打印行("PASS session_persistence_total_35"); }
+    否则 { IO.打印行("FAIL session_persistence_total=" + 整数转字符串(通过)); }
+}

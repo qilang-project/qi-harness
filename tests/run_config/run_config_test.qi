@@ -1,0 +1,79 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.大模型 作为 底层模型;
+导入 Harness::{大模型, 开启会话, 创建代理, 简单问, 关闭代理};
+导入 Harness.代理::{代理, 简单问使用配置};
+导入 Harness.运行配置::{运行配置, 默认运行配置, 配置最大工具步数,
+    配置滑窗压缩, 运行取消是否支持};
+导入 Harness.事件::{订阅生命周期事件, 清空生命周期订阅者};
+
+变量 看见压缩事件: 整数 = 0;
+
+函数 收事件(JSON文本: 字符串) : 整数 {
+    如果 (字符串::包含(JSON文本, "\"type\":\"context_compact\"") == 1) {
+        看见压缩事件 = 1;
+    }
+    返回 1;
+}
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) {
+        IO.打印行("PASS " + 名字);
+        返回 1;
+    }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 种历史(会话: 整数) {
+    底层模型.设置历史JSON(会话, "["
+        + "{\"role\":\"system\",\"content\":\"system-marker\"},"
+        + "{\"role\":\"user\",\"content\":\"early-user-marker-aaaaaaaaaaaaaaaa\"},"
+        + "{\"role\":\"assistant\",\"content\":\"early-answer-marker-bbbbbbbbbbbbbbbb\"},"
+        + "{\"role\":\"user\",\"content\":\"middle-user-marker-cccccccccccccccc\"},"
+        + "{\"role\":\"assistant\",\"content\":\"middle-answer-marker-dddddddddddddddd\"},"
+        + "{\"role\":\"user\",\"content\":\"recent-user-marker-eeeeeeeeeeeeeeee\"},"
+        + "{\"role\":\"assistant\",\"content\":\"recent-answer-marker-ffffffffffffffff\"}"
+        + "]");
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    变量 配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + "/v1/run-config",
+        "fixture-key", "fixture-model");
+    变量 会话: 整数 = 开启会话(配置);
+    变量 代理值: 代理 = 创建代理("run-config-test", 会话);
+
+    通过 = 通过 + 断言(代理值.最大步数 == 10,
+        "default_config_preserves_existing_behavior");
+    通过 = 通过 + 断言(运行取消是否支持() == 0, "cancellation_explicitly_unsupported");
+
+    清空生命周期订阅者();
+    订阅生命周期事件(收事件, 0);
+    种历史(会话);
+    变量 单次配置: 运行配置 = 默认运行配置();
+    单次配置 = 配置最大工具步数(单次配置, 2);
+    单次配置 = 配置滑窗压缩(单次配置, 1, 2);
+    变量 裁剪回复: 字符串 = 简单问使用配置(代理值, "trim-call", 单次配置);
+    通过 = 通过 + 断言(字符串::包含(裁剪回复, "count=4") == 1
+        && 字符串::包含(裁剪回复, "early=0") == 1
+        && 字符串::包含(裁剪回复, "recent=1") == 1,
+        "automatic_pre_call_sliding_window_trim");
+    通过 = 通过 + 断言(看见压缩事件 == 1, "automatic_trim_emits_compaction_event");
+    通过 = 通过 + 断言(代理值.最大步数 == 10,
+        "per_call_override_does_not_mutate_agent_defaults");
+
+    种历史(会话);
+    变量 默认回复: 字符串 = 简单问(代理值, "default-call");
+    通过 = 通过 + 断言(字符串::包含(默认回复, "count=8") == 1
+        && 字符串::包含(默认回复, "early=1") == 1,
+        "default_call_does_not_trim_context");
+
+    清空生命周期订阅者();
+    关闭代理(代理值);
+    如果 (通过 == 6) { IO.打印行("PASS run_config_total_6"); }
+    否则 { IO.打印行("FAIL run_config_total=" + 整数转字符串(通过)); }
+}

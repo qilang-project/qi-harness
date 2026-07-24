@@ -1,0 +1,113 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.大模型 作为 底层模型;
+导入 标准库.JSON 作为 J;
+导入 Harness::{大模型, 配置超时, 开启会话, 创建代理, 设置重试策略,
+    附加预算, 设置请求令牌预算, 简单问, 关闭代理};
+导入 Harness.代理::{代理, 附加会话存储, 恢复持久会话};
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 加载会话条目};
+导入 Harness.预算::{创建预算};
+导入 Harness.重试::{重试策略, 错误类别};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 单次策略() : 重试策略 {
+    返回 新建 重试策略 {
+        最大次数: 1,
+        起始延迟毫秒: 0,
+        最大延迟毫秒: 0,
+        倍数: 2,
+    };
+}
+
+函数 新代理(库: 整数, 会话ID: 字符串, 超时秒: 整数) : 代理 {
+    变量 配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + "/v1/turns",
+        "fixture-key", "fixture-model");
+    配置 = 配置超时(配置, 超时秒);
+    返回 设置重试策略(附加会话存储(
+        创建代理("failed-turn-persistence", 开启会话(配置)), 库, 会话ID), 单次策略());
+}
+
+函数 类型数(条目: 整数, 类型值: 字符串) : 整数 {
+    变量 数: 整数 = 0;
+    变量 i: 整数 = 0;
+    当 (i < J.数组长度(条目)) {
+        如果 (字符串::等于(J.获取字符串(J.数组获取对象(条目, i), "type"), 类型值) == 1) {
+            数 = 数 + 1;
+        }
+        i = i + 1;
+    }
+    返回 数;
+}
+
+函数 跑失败后恢复(库: 整数, 会话ID: 字符串, 失败提示: 字符串,
+                恢复提示: 字符串, 超时秒: 整数) : 整数 {
+    变量 通过: 整数 = 0;
+    变量 代理值: 代理 = 新代理(库, 会话ID, 超时秒);
+    通过 = 通过 + 断言(字符串::等于(简单问(代理值, "seed-" + 恢复提示), "seed-ok") == 1,
+        恢复提示 + "_seed_success");
+    变量 失败回复: 字符串 = 简单问(代理值, 失败提示);
+    通过 = 通过 + 断言(错误类别(失败回复) != 0, 恢复提示 + "_failure_returned");
+    关闭代理(代理值);
+
+    变量 恢复代理: 代理 = 新代理(库, 会话ID, 3);
+    恢复持久会话(恢复代理);
+    变量 历史: 字符串 = 底层模型.历史JSON(恢复代理.会话句柄);
+    通过 = 通过 + 断言(字符串::包含(历史, 失败提示) == 0
+        && 字符串::包含(历史, "seed-" + 恢复提示) == 1,
+        恢复提示 + "_restore_excludes_failed_prompt");
+    通过 = 通过 + 断言(字符串::等于(简单问(恢复代理, "recover-" + 恢复提示),
+        "recovered-clean") == 1, 恢复提示 + "_continued_session_is_clean");
+    关闭代理(恢复代理);
+    返回 通过;
+}
+
+函数 入口() {
+    变量 路径: 字符串 = "/tmp/qi_harness_failed_turn_persistence_test.db";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+    变量 库: 整数 = 打开会话存储(路径);
+    变量 通过: 整数 = 0;
+
+    通过 = 通过 + 跑失败后恢复(库, "timeout-session", "timeout-failed-prompt", "timeout", 1);
+    通过 = 通过 + 跑失败后恢复(库, "server-session", "server-failed-prompt", "server", 3);
+
+    变量 预算代理: 代理 = 新代理(库, "budget-session", 3);
+    预算代理 = 附加预算(预算代理, 创建预算(5, 0));
+    预算代理 = 设置请求令牌预算(预算代理, 4, 1, 0);
+    通过 = 通过 + 断言(字符串::等于(简单问(预算代理, "seed-budget"), "seed-ok") == 1,
+        "budget_seed_success");
+    通过 = 通过 + 断言(字符串::等于(简单问(预算代理, "budget-blocked-prompt"),
+        "[harness] budget_exceeded") == 1, "budget_rejection_returned");
+    关闭代理(预算代理);
+    变量 预算恢复: 代理 = 新代理(库, "budget-session", 3);
+    恢复持久会话(预算恢复);
+    变量 预算历史: 字符串 = 底层模型.历史JSON(预算恢复.会话句柄);
+    通过 = 通过 + 断言(字符串::包含(预算历史, "budget-blocked-prompt") == 0
+        && 字符串::包含(预算历史, "seed-budget") == 1,
+        "budget_restore_excludes_blocked_prompt");
+    通过 = 通过 + 断言(字符串::等于(简单问(预算恢复, "recover-budget"),
+        "recovered-clean") == 1, "budget_continued_session_is_clean");
+    关闭代理(预算恢复);
+
+    变量 超时条目: 整数 = J.解码(加载会话条目(库, "timeout-session"));
+    变量 服务条目: 整数 = J.解码(加载会话条目(库, "server-session"));
+    变量 预算条目: 整数 = J.解码(加载会话条目(库, "budget-session"));
+    通过 = 通过 + 断言(类型数(超时条目, "error.model") == 1
+        && 类型数(超时条目, "turn.failed") == 1, "timeout_error_audit_retained");
+    通过 = 通过 + 断言(类型数(服务条目, "error.model") == 1
+        && 类型数(服务条目, "turn.failed") == 1, "server_error_audit_retained");
+    通过 = 通过 + 断言(类型数(预算条目, "error.framework") == 1
+        && 类型数(预算条目, "turn.failed") == 1, "budget_error_audit_retained");
+
+    关闭会话存储(库);
+    IO.删除文件(路径);
+    如果 (通过 == 15) { IO.打印行("PASS failed_turn_persistence_total_15"); }
+    否则 { IO.打印行("FAIL failed_turn_persistence_total=" + 整数转字符串(通过)); }
+}

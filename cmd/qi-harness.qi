@@ -1,0 +1,368 @@
+// qi-harness developer CLI
+//
+// Run:     qi run cmd/qi-harness.qi -- check
+// Compile: qi compile cmd/qi-harness.qi -o /tmp/qi-harness-cli
+
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.操作系统 作为 系统;
+导入 CLI::{
+    创建应用, 创建命令, 创建参数, 执行,
+    应用版本, 应用作者, 应用简介, 应用执行, 应用添加参数, 应用添加命令,
+    命令简介, 命令示例, 命令执行, 命令添加参数, 命令添加别名, 命令添加子命令,
+    参数长名, 参数短名, 参数帮助, 参数默认值, 参数标志, 参数持久,
+    值, 标志
+};
+导入 Harness.命令行::{CLI会话数据库路径, CLI提供商就绪, CLI嵌入就绪, CLIMCP就绪,
+    CLI诊断JSON, CLI列出会话JSON, CLI恢复信息JSON};
+导入 Harness.会话存储::{
+    打开会话存储, 关闭会话存储, 会话存在, 当前会话叶, 设置当前会话叶,
+    加载会话条目, 当前会话路径, 导出持久会话JSON, 导入持久会话JSON
+};
+
+函数 已设置(名字: 字符串, 内容: 字符串) : 整数 {
+    如果 (字符串::字节长度(内容) > 0) {
+        IO.打印行("  OK      " + 名字);
+        返回 1;
+    }
+    IO.打印行("  MISSING " + 名字);
+    返回 0;
+}
+
+函数 读取诊断JSON(上下文值: 上下文, 会话可访问: 整数) : 字符串 {
+    变量 聊天URL: 字符串 = 系统.获取环境变量("QI_CHAT_URL");
+    变量 聊天密钥: 字符串 = 系统.获取环境变量("QI_CHAT_KEY");
+    变量 聊天模型: 字符串 = 系统.获取环境变量("QI_CHAT_MODEL");
+    变量 通用基址: 字符串 = 系统.获取环境变量("QI_LLM_BASE");
+    变量 通用密钥: 字符串 = 系统.获取环境变量("QI_LLM_KEY");
+    变量 通用模型: 字符串 = 系统.获取环境变量("QI_LLM_MODEL");
+    变量 DeepSeek密钥: 字符串 = 系统.获取环境变量("DEEPSEEK_API_KEY");
+    返回 CLI诊断JSON(聊天URL, 聊天密钥, 聊天模型, 通用基址, 通用密钥, 通用模型,
+        DeepSeek密钥,
+        系统.获取环境变量("QI_EMBED_URL"), 系统.获取环境变量("QI_EMBED_KEY"),
+        系统.获取环境变量("QI_EMBED_MODEL"), 系统.获取环境变量("QI_MCP_COMMAND"),
+        系统.获取环境变量("QI_MCP_URL"), 会话可访问);
+}
+
+函数 能力失败(上下文值: 上下文, 聊天就绪: 整数, 嵌入就绪: 整数,
+             MCP就绪: 整数, 会话可访问: 整数) : 整数 {
+    如果 (标志(上下文值, "require-chat") == 1 && 聊天就绪 == 0) { 返回 1; }
+    如果 (标志(上下文值, "require-embedding") == 1 && 嵌入就绪 == 0) { 返回 1; }
+    如果 (标志(上下文值, "require-mcp") == 1 && MCP就绪 == 0) { 返回 1; }
+    如果 (标志(上下文值, "require-session") == 1 && 会话可访问 == 0) { 返回 1; }
+    返回 0;
+}
+
+函数 执行诊断(上下文值: 上下文, 机器可读: 整数) : 整数 {
+    变量 聊天URL: 字符串 = 系统.获取环境变量("QI_CHAT_URL");
+    变量 聊天密钥: 字符串 = 系统.获取环境变量("QI_CHAT_KEY");
+    变量 聊天模型: 字符串 = 系统.获取环境变量("QI_CHAT_MODEL");
+    变量 通用密钥: 字符串 = 系统.获取环境变量("QI_LLM_KEY");
+    变量 DeepSeek密钥: 字符串 = 系统.获取环境变量("DEEPSEEK_API_KEY");
+    变量 嵌入URL: 字符串 = 系统.获取环境变量("QI_EMBED_URL");
+    变量 嵌入密钥: 字符串 = 系统.获取环境变量("QI_EMBED_KEY");
+    变量 嵌入模型: 字符串 = 系统.获取环境变量("QI_EMBED_MODEL");
+    变量 MCP命令: 字符串 = 系统.获取环境变量("QI_MCP_COMMAND");
+    变量 MCP网址: 字符串 = 系统.获取环境变量("QI_MCP_URL");
+    变量 库: 整数 = 打开会话存储(取数据库路径(上下文值));
+    变量 会话可访问: 整数 = 0;
+    如果 (库 > 0) { 会话可访问 = 1; 关闭会话存储(库); }
+    变量 聊天就绪: 整数 = CLI提供商就绪(聊天URL, 聊天密钥, 聊天模型, 通用密钥, DeepSeek密钥);
+    变量 嵌入就绪: 整数 = CLI嵌入就绪(嵌入URL, 嵌入密钥, 嵌入模型);
+    变量 MCP就绪: 整数 = CLIMCP就绪(MCP命令, MCP网址);
+
+    变量 输出JSON: 整数 = 机器可读;
+    如果 (机器可读 == 0) { 输出JSON = 标志(上下文值, "json"); }
+    如果 (输出JSON == 1) {
+        IO.打印行(读取诊断JSON(上下文值, 会话可访问));
+    } 否则 {
+        IO.打印行("Configuration diagnostics (values redacted):");
+        如果 (聊天就绪 == 1) { IO.打印行("  CONFIGURED chat provider"); }
+        否则 { IO.打印行("  UNCONFIGURED chat provider"); }
+        如果 (嵌入就绪 == 1) { IO.打印行("  CONFIGURED embedding"); }
+        否则 { IO.打印行("  UNCONFIGURED embedding"); }
+        如果 (MCP就绪 == 1) { IO.打印行("  CONFIGURED MCP command or URL"); }
+        否则 { IO.打印行("  UNCONFIGURED MCP command or URL"); }
+        如果 (会话可访问 == 1) { IO.打印行("  ACCESSIBLE session database"); }
+        否则 { IO.打印行("  INACCESSIBLE session database"); }
+    }
+    如果 (能力失败(上下文值, 聊天就绪, 嵌入就绪, MCP就绪, 会话可访问) == 1) {
+        系统.退出程序(1);
+        返回 1;
+    }
+    返回 0;
+}
+
+函数 执行检查(上下文值: 上下文) : 整数 {
+    返回 执行诊断(上下文值, 0);
+}
+
+函数 执行状态(上下文值: 上下文) : 整数 {
+    返回 执行诊断(上下文值, 1);
+}
+
+函数 执行测试说明(上下文值: 上下文) : 整数 {
+    IO.打印行("Repository quality gate:");
+    IO.打印行("  ./run-offline-tests.sh");
+    IO.打印行("This command describes the gate; run it from the repository root to preserve its exit status.");
+    返回 0;
+}
+
+函数 取数据库路径(上下文值: 上下文) : 字符串 {
+    返回 CLI会话数据库路径(值(上下文值, "db"));
+}
+
+函数 打开CLI数据库(上下文值: 上下文) : 整数 {
+    变量 路径: 字符串 = 取数据库路径(上下文值);
+    变量 库: 整数 = 打开会话存储(路径);
+    如果 (库 <= 0) { IO.打印行("Failed to open session database: " + 路径); }
+    返回 库;
+}
+
+函数 失败退出(消息: 字符串, 库: 整数) : 整数 {
+    IO.打印行("ERROR " + 消息);
+    如果 (库 > 0) { 关闭会话存储(库); }
+    系统.退出程序(1);
+    返回 1;
+}
+
+函数 执行会话列表(上下文值: 上下文) : 整数 {
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 1; }
+    IO.打印行(CLI列出会话JSON(库));
+    关闭会话存储(库);
+    返回 0;
+}
+
+函数 执行会话显示(上下文值: 上下文) : 整数 {
+    变量 会话ID: 字符串 = 值(上下文值, "session-id");
+    如果 (字符串::字节长度(会话ID) == 0) { 返回 失败退出("session-id is required", 0); }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    如果 (会话存在(库, 会话ID) == 0) {
+        返回 失败退出("session not found: " + 会话ID, 库);
+    }
+    IO.打印行("session_id=" + 会话ID);
+    IO.打印行("leaf_entry_id=" + 当前会话叶(库, 会话ID));
+    IO.打印行("entries=" + 加载会话条目(库, 会话ID));
+    关闭会话存储(库);
+    返回 0;
+}
+
+函数 执行会话路径(上下文值: 上下文) : 整数 {
+    变量 会话ID: 字符串 = 值(上下文值, "session-id");
+    如果 (字符串::字节长度(会话ID) == 0) { 返回 失败退出("session-id is required", 0); }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    如果 (会话存在(库, 会话ID) == 0) {
+        返回 失败退出("session not found: " + 会话ID, 库);
+    }
+    IO.打印行(当前会话路径(库, 会话ID));
+    关闭会话存储(库);
+    返回 0;
+}
+
+函数 执行会话恢复信息(上下文值: 上下文) : 整数 {
+    变量 会话ID: 字符串 = 值(上下文值, "session-id");
+    如果 (字符串::字节长度(会话ID) == 0) { 返回 失败退出("session-id is required", 0); }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    如果 (会话存在(库, 会话ID) == 0) { 返回 失败退出("session not found: " + 会话ID, 库); }
+    变量 信息: 字符串 = CLI恢复信息JSON(会话ID, 当前会话叶(库, 会话ID), 当前会话路径(库, 会话ID));
+    如果 (字符串::字节长度(信息) == 0) { 返回 失败退出("could not inspect restore path", 库); }
+    IO.打印行(信息);
+    关闭会话存储(库);
+    返回 0;
+}
+
+函数 执行会话导出(上下文值: 上下文) : 整数 {
+    变量 会话ID: 字符串 = 值(上下文值, "session-id");
+    变量 输出路径: 字符串 = 值(上下文值, "file");
+    如果 (字符串::字节长度(会话ID) == 0) { 返回 失败退出("session-id is required", 0); }
+    如果 (字符串::字节长度(输出路径) == 0) { 返回 失败退出("export file is required", 0); }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    如果 (会话存在(库, 会话ID) == 0) {
+        返回 失败退出("session not found: " + 会话ID, 库);
+    }
+    变量 导出JSON: 字符串 = 导出持久会话JSON(库, 会话ID);
+    如果 (字符串::字节长度(导出JSON) == 0) {
+        返回 失败退出("session export failed: " + 会话ID, 库);
+    }
+    如果 (IO.写入文件(输出路径, 导出JSON) <= 0) {
+        返回 失败退出("could not write export file: " + 输出路径, 库);
+    }
+    关闭会话存储(库);
+    IO.打印行("Exported session " + 会话ID + " to " + 输出路径);
+    返回 0;
+}
+
+函数 执行会话导入(上下文值: 上下文) : 整数 {
+    变量 输入路径: 字符串 = 值(上下文值, "file");
+    如果 (字符串::字节长度(输入路径) == 0) { 返回 失败退出("import file is required", 0); }
+    如果 (IO.文件存在(输入路径) == 0) { 返回 失败退出("import file not found: " + 输入路径, 0); }
+    变量 导入JSON: 字符串 = IO.读取文件(输入路径);
+    如果 (字符串::字节长度(导入JSON) == 0) {
+        返回 失败退出("import file is empty or unreadable: " + 输入路径, 0);
+    }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    变量 导入状态: 整数 = 导入持久会话JSON(库, 导入JSON);
+    如果 (导入状态 == 0 - 1) {
+        返回 失败退出("session import conflicts with an existing session or entry ID", 库);
+    }
+    如果 (导入状态 == 0) {
+        返回 失败退出("malformed session import; expected a valid version 1 export", 库);
+    }
+    关闭会话存储(库);
+    IO.打印行("Imported session from " + 输入路径);
+    返回 0;
+}
+
+函数 执行会话分支(上下文值: 上下文) : 整数 {
+    变量 会话ID: 字符串 = 值(上下文值, "session-id");
+    变量 条目ID: 字符串 = 值(上下文值, "entry-id");
+    如果 (字符串::字节长度(会话ID) == 0) { 返回 失败退出("session-id is required", 0); }
+    如果 (字符串::字节长度(条目ID) == 0) { 返回 失败退出("entry-id is required", 0); }
+    变量 库: 整数 = 打开CLI数据库(上下文值);
+    如果 (库 <= 0) { 返回 失败退出("could not open the session database", 0); }
+    如果 (会话存在(库, 会话ID) == 0) {
+        返回 失败退出("session not found: " + 会话ID, 库);
+    }
+    设置当前会话叶(库, 会话ID, 条目ID);
+    如果 (字符串::等于(当前会话叶(库, 会话ID), 条目ID) == 0) {
+        返回 失败退出("entry not found in session " + 会话ID + ": " + 条目ID, 库);
+    }
+    关闭会话存储(库);
+    IO.打印行("Session " + 会话ID + " now branches from entry " + 条目ID);
+    返回 0;
+}
+
+函数 根执行(上下文值: 上下文) : 整数 {
+    IO.打印行("qi-harness developer CLI; use --help for commands");
+    返回 0;
+}
+
+函数 会话ID参数() : 参数 {
+    变量 参数值: 参数 = 创建参数("session-id");
+    返回 参数帮助(参数值, "Persistent session ID");
+}
+
+函数 文件参数(帮助文本: 字符串) : 参数 {
+    变量 参数值: 参数 = 创建参数("file");
+    返回 参数帮助(参数值, 帮助文本);
+}
+
+函数 条目ID参数() : 参数 {
+    变量 参数值: 参数 = 创建参数("entry-id");
+    返回 参数帮助(参数值, "Entry ID in the persistent session");
+}
+
+函数 入口() {
+    变量 应用值: 应用 = 创建应用("qi-harness");
+    应用值 = 应用版本(应用值, "0.2.0");
+    应用值 = 应用作者(应用值, "Qi Language Team");
+    应用值 = 应用简介(应用值, "Developer diagnostics, quality-gate guidance, and SQLite session inspection");
+    应用值 = 应用执行(应用值, 根执行);
+
+    变量 数据库参数: 参数 = 创建参数("db");
+    数据库参数 = 参数长名(数据库参数, "db");
+    数据库参数 = 参数短名(数据库参数, "d");
+    数据库参数 = 参数帮助(数据库参数, "Session SQLite path (default: QI_SESSION_DB or ~/.qi-harness-sessions.db)");
+    数据库参数 = 参数默认值(数据库参数, "");
+    数据库参数 = 参数持久(数据库参数);
+    应用值 = 应用添加参数(应用值, 数据库参数);
+
+    变量 检查命令: 命令 = 创建命令("check");
+    检查命令 = 命令简介(检查命令, "Diagnose chat, embedding, MCP, and session configuration without printing values");
+    检查命令 = 命令添加别名(检查命令, "diagnose");
+    检查命令 = 命令执行(检查命令, 执行检查);
+    变量 JSON参数: 参数 = 创建参数("json");
+    JSON参数 = 参数长名(JSON参数, "json");
+    JSON参数 = 参数帮助(JSON参数, "Print machine-readable JSON");
+    JSON参数 = 参数标志(JSON参数);
+    检查命令 = 命令添加参数(检查命令, JSON参数);
+    变量 必需聊天: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-chat"), "require-chat"), "Fail unless chat is configured"));
+    变量 必需嵌入: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-embedding"), "require-embedding"), "Fail unless embedding is configured"));
+    变量 必需MCP: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-mcp"), "require-mcp"), "Fail unless MCP is configured"));
+    变量 必需会话: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-session"), "require-session"), "Fail unless the session database is accessible"));
+    检查命令 = 命令添加参数(检查命令, 必需聊天);
+    检查命令 = 命令添加参数(检查命令, 必需嵌入);
+    检查命令 = 命令添加参数(检查命令, 必需MCP);
+    检查命令 = 命令添加参数(检查命令, 必需会话);
+    应用值 = 应用添加命令(应用值, 检查命令);
+
+    变量 状态命令: 命令 = 创建命令("status");
+    状态命令 = 命令简介(状态命令, "Print machine-readable configuration diagnostics");
+    状态命令 = 命令执行(状态命令, 执行状态);
+    变量 状态必需聊天: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-chat"), "require-chat"), "Fail unless chat is configured"));
+    变量 状态必需嵌入: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-embedding"), "require-embedding"), "Fail unless embedding is configured"));
+    变量 状态必需MCP: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-mcp"), "require-mcp"), "Fail unless MCP is configured"));
+    变量 状态必需会话: 参数 = 参数标志(参数帮助(参数长名(创建参数("require-session"), "require-session"), "Fail unless the session database is accessible"));
+    状态命令 = 命令添加参数(状态命令, 状态必需聊天);
+    状态命令 = 命令添加参数(状态命令, 状态必需嵌入);
+    状态命令 = 命令添加参数(状态命令, 状态必需MCP);
+    状态命令 = 命令添加参数(状态命令, 状态必需会话);
+    应用值 = 应用添加命令(应用值, 状态命令);
+
+    变量 测试命令: 命令 = 创建命令("test");
+    测试命令 = 命令简介(测试命令, "Show the repository quality-gate invocation");
+    测试命令 = 命令执行(测试命令, 执行测试说明);
+    应用值 = 应用添加命令(应用值, 测试命令);
+
+    变量 会话命令: 命令 = 创建命令("session");
+    会话命令 = 命令简介(会话命令, "Inspect, export, import, and branch persistent sessions");
+
+    变量 列表命令: 命令 = 创建命令("list");
+    列表命令 = 命令简介(列表命令, "List sessions as JSON");
+    列表命令 = 命令添加别名(列表命令, "ls");
+    列表命令 = 命令执行(列表命令, 执行会话列表);
+    会话命令 = 命令添加子命令(会话命令, 列表命令);
+
+    变量 显示命令: 命令 = 创建命令("show");
+    显示命令 = 命令简介(显示命令, "Show a session leaf and all branch entries");
+    显示命令 = 命令示例(显示命令, "qi-harness --db sessions.db session show session-123");
+    显示命令 = 命令执行(显示命令, 执行会话显示);
+    显示命令 = 命令添加参数(显示命令, 会话ID参数());
+    会话命令 = 命令添加子命令(会话命令, 显示命令);
+
+    变量 路径命令: 命令 = 创建命令("path");
+    路径命令 = 命令简介(路径命令, "Show the selected root-to-leaf path as JSON");
+    路径命令 = 命令执行(路径命令, 执行会话路径);
+    路径命令 = 命令添加参数(路径命令, 会话ID参数());
+    会话命令 = 命令添加子命令(会话命令, 路径命令);
+
+    变量 恢复信息命令: 命令 = 创建命令("restore-info");
+    恢复信息命令 = 命令简介(恢复信息命令, "Show metadata for messages that would be restored without invoking a provider");
+    恢复信息命令 = 命令执行(恢复信息命令, 执行会话恢复信息);
+    恢复信息命令 = 命令添加参数(恢复信息命令, 会话ID参数());
+    会话命令 = 命令添加子命令(会话命令, 恢复信息命令);
+
+    变量 导出命令: 命令 = 创建命令("export");
+    导出命令 = 命令简介(导出命令, "Export one complete session, including all branches, to a JSON file");
+    导出命令 = 命令示例(导出命令, "qi-harness --db sessions.db session export session-123 session.json");
+    导出命令 = 命令执行(导出命令, 执行会话导出);
+    导出命令 = 命令添加参数(导出命令, 会话ID参数());
+    导出命令 = 命令添加参数(导出命令, 文件参数("Destination JSON file"));
+    会话命令 = 命令添加子命令(会话命令, 导出命令);
+
+    变量 导入命令: 命令 = 创建命令("import");
+    导入命令 = 命令简介(导入命令, "Import a complete session from a version 1 JSON export");
+    导入命令 = 命令示例(导入命令, "qi-harness --db sessions.db session import session.json");
+    导入命令 = 命令执行(导入命令, 执行会话导入);
+    导入命令 = 命令添加参数(导入命令, 文件参数("Source JSON file"));
+    会话命令 = 命令添加子命令(会话命令, 导入命令);
+
+    变量 分支命令: 命令 = 创建命令("branch");
+    分支命令 = 命令简介(分支命令, "Move the session leaf to an existing entry for the next append");
+    分支命令 = 命令示例(分支命令, "qi-harness --db sessions.db session branch session-123 entry-456");
+    分支命令 = 命令执行(分支命令, 执行会话分支);
+    分支命令 = 命令添加参数(分支命令, 会话ID参数());
+    分支命令 = 命令添加参数(分支命令, 条目ID参数());
+    会话命令 = 命令添加子命令(会话命令, 分支命令);
+
+    应用值 = 应用添加命令(应用值, 会话命令);
+    执行(应用值);
+}

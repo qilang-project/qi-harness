@@ -1,0 +1,89 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness.出站安全::{创建生产出站策略, 创建开发出站策略, 添加出站允许目标,
+    添加出站解析地址, 出站网址允许, 出站运行时网址允许, 出站重定向允许, 添加MCP命令清单,
+    MCP清单索引, MCP清理环境};
+导入 Harness.MCP客户端::{连接MCP_stdio按策略, 连接MCP_http按策略, 发送请求, 关闭MCP,
+    MCP请求};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字); 返回 0;
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    变量 生产: 整数 = 创建生产出站策略();
+    添加出站允许目标(生产, "api.example.com", 443);
+    添加出站解析地址(生产, "api.example.com", "93.184.216.34");
+    添加出站允许目标(生产, "0:0:0:0:0:0:0:1", 443);
+    添加出站允许目标(生产, "0:0:0:0:0:0:0:0", 443);
+    添加出站允许目标(生产, "0:0:0:0:0:ffff:7f00:1", 443);
+    添加出站允许目标(生产, "::ffff:7f00:1", 443);
+    添加出站允许目标(生产, "::ffff:127.0.0.1", 443);
+    添加出站允许目标(生产, "fd00:0:0:0:0:0:0:1", 443);
+    添加出站允许目标(生产, "fe80:0:0:0:0:0:0:1", 443);
+    添加出站允许目标(生产, "ff02:0:0:0:0:0:0:1", 443);
+    添加出站允许目标(生产, "::ffff:5db8:d822", 443);
+    添加出站允许目标(生产, "93.184.216.34", 443);
+    通过 = 通过 + 断言(出站网址允许(生产, "https://api.example.com/v1") == 1, "public_https_allowed");
+    通过 = 通过 + 断言(出站运行时网址允许(生产, "https://api.example.com/v1") == 0, "runtime_dns_pinning_fail_closed");
+    通过 = 通过 + 断言(出站网址允许(生产, "http://api.example.com/v1") == 0, "production_http_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://user:pass@api.example.com/v1") == 0, "userinfo_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://127.0.0.1/") == 0, "ipv4_loopback_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[::1]/") == 0, "ipv6_loopback_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[fe80::1]/") == 0, "ipv6_link_local_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[0:0:0:0:0:0:0:1]/") == 0, "ipv6_expanded_loopback_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[0:0:0:0:0:0:0:0]/") == 0, "ipv6_expanded_unspecified_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[0:0:0:0:0:ffff:7f00:1]/") == 0, "ipv4_mapped_expanded_hex_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[::ffff:7f00:1]/") == 0, "ipv4_mapped_compressed_hex_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[::ffff:127.0.0.1]/") == 0, "ipv4_mapped_dotted_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[fd00:0:0:0:0:0:0:1]/") == 0, "ipv6_ula_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[fe80:0:0:0:0:0:0:1]/") == 0, "ipv6_expanded_link_local_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[ff02:0:0:0:0:0:0:1]/") == 0, "ipv6_multicast_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[::ffff:5db8:d822]/") == 1, "ipv4_mapped_public_allowed");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://[1:2:3:4:5:6:7:8:9]/") == 0, "malformed_ipv6_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://169.254.169.254/latest/meta-data") == 0, "metadata_ip_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://metadata.google.internal/") == 0, "metadata_host_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://2130706433/") == 0, "decimal_ipv4_denied");
+    通过 = 通过 + 断言(出站网址允许(生产, "https://0x7f000001/") == 0, "hex_ipv4_denied");
+    通过 = 通过 + 断言(出站重定向允许(生产, "https://api.example.com/v1", "https://127.0.0.1/") == 0, "redirect_revalidated");
+
+    变量 未解析: 整数 = 创建生产出站策略();
+    添加出站允许目标(未解析, "unresolved.example", 443);
+    通过 = 通过 + 断言(出站网址允许(未解析, "https://unresolved.example/") == 0, "production_dns_fail_closed");
+
+    变量 开发: 整数 = 创建开发出站策略();
+    通过 = 通过 + 断言(出站网址允许(开发, "http://127.0.0.1:43510/v1") == 1, "explicit_dev_local_http");
+    通过 = 通过 + 断言(字符串::字节长度(连接MCP_http按策略(生产, "https://93.184.216.34/mcp")) == 0,
+        "mcp_production_http_redirect_fail_closed");
+    通过 = 通过 + 断言(字符串::字节长度(发送请求("mcpr|0|1|forged", "tools/list", "{}")) == 0,
+        "mcp_forged_descriptor_denied");
+    通过 = 通过 + 断言(字符串::字节长度(发送请求("mcpc|1", "tools/list", "{}")) == 0,
+        "mcp_legacy_raw_descriptor_denied");
+    通过 = 通过 + 断言(关闭MCP("mcpr|0|1|forged") == 0, "mcp_forged_descriptor_close_denied");
+    通过 = 通过 + 断言(字符串::字节长度(MCP请求(1, "tools/list", "{}")) == 0,
+        "mcp_raw_integer_denied");
+
+    通过 = 通过 + 断言(添加MCP命令清单(生产, "bad-latest", "npx",
+        "[\"-y\",\"@playwright/mcp@latest\"]", "[]") == 0, "mcp_unpinned_package_denied");
+    通过 = 通过 + 断言(添加MCP命令清单(生产, "bad-shell", "sh",
+        "[\"-c\",\"curl attacker\"]", "[]") == 0, "mcp_shell_command_denied");
+    通过 = 通过 + 断言(添加MCP命令清单(生产, "bad-shell-path", "/bin/sh",
+        "[\"-c\",\"curl attacker\"]", "[]") == 0, "mcp_shell_path_denied");
+    通过 = 通过 + 断言(添加MCP命令清单(生产, "fixed", "/opt/qi/mcp-server",
+        "[\"--stdio\"]", "[\"SAFE_FLAG\"]") == 1, "mcp_fixed_executable_allowed");
+    通过 = 通过 + 断言(MCP清单索引(生产, "fixed") >= 0, "mcp_manifest_registered");
+    通过 = 通过 + 断言(字符串::字节长度(连接MCP_stdio按策略(生产, "fixed", "[]")) == 0,
+        "mcp_production_env_inheritance_fail_closed");
+    变量 清洁: 字符串 = MCP清理环境(生产, "fixed",
+        "[{\"name\":\"SAFE_FLAG\",\"value\":\"1\"},{\"name\":\"AWS_SECRET_ACCESS_KEY\",\"value\":\"secret\"},{\"name\":\"HTTPS_PROXY\",\"value\":\"http://proxy\"}]");
+    通过 = 通过 + 断言(字符串::包含(清洁, "SAFE_FLAG") == 1, "mcp_allowed_env_retained");
+    通过 = 通过 + 断言(字符串::包含(清洁, "AWS_SECRET_ACCESS_KEY") == 0, "mcp_secret_env_stripped");
+    通过 = 通过 + 断言(字符串::包含(清洁, "HTTPS_PROXY") == 0, "mcp_proxy_env_stripped");
+
+    如果 (通过 == 38) { IO.打印行("PASS outbound_policy_total_38"); }
+    否则 { IO.打印行("FAIL outbound_policy_total=" + 整数转字符串(通过)); }
+}

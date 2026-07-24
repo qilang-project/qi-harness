@@ -1,0 +1,238 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 标准库.数据库;
+导入 Harness.运行日志::{打开运行日志, 关闭运行日志, 创建代理运行, 获取运行租约,
+    续期运行租约, 释放运行租约, 追加运行事件, 列出运行事件, 创建模型尝试,
+    创建工具执行, 更新工具执行, 标记工具执行不确定, 处置重复工具执行JSON,
+    预留运行预算, 结算运行预算, 保守保留运行预算,
+    追加流运行事件, 终结流运行, 恢复终结运行, 获取运行预算JSON,
+    获取代理运行JSON, 获取工具执行JSON};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 首项(文本: 字符串) : 整数 {
+    变量 数组值: 整数 = J.解码(文本);
+    如果 (数组值 <= 0 || J.数组长度(数组值) == 0) { 返回 0; }
+    返回 J.数组获取对象(数组值, 0);
+}
+
+函数 入口() {
+    变量 路径: 字符串 = "/tmp/qi_harness_run_journal_test.db";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+    变量 通过: 整数 = 0;
+    变量 库: 整数 = 打开运行日志(路径);
+    通过 = 通过 + 断言(库 > 0, "journal_opened");
+
+    通过 = 通过 + 断言(创建代理运行(库, "run-1", "tenant-a", "session-a", "request-a",
+        "hash-a", "created", 100) == 1, "run_created");
+    通过 = 通过 + 断言(创建代理运行(库, "run-1", "tenant-a", "session-a", "request-a",
+        "hash-a", "created", 100) == 2, "idempotent_create_replayed");
+    通过 = 通过 + 断言(创建代理运行(库, "run-other", "tenant-a", "session-a", "request-a",
+        "hash-b", "created", 100) == 0, "request_hash_conflict_rejected");
+    变量 运行行: 整数 = 首项(获取代理运行JSON(库, "run-1"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(运行行, "request_hash"), "hash-a") == 1,
+        "hash_conflict_preserves_original");
+
+    变量 栅栏一: 整数 = 获取运行租约(库, "run-1", "worker-a", 200, 500);
+    通过 = 通过 + 断言(栅栏一 == 1, "first_lease_fence");
+    通过 = 通过 + 断言(续期运行租约(库, "run-1", "worker-a", 栅栏一, 250, 600) == 1,
+        "lease_renewed");
+    通过 = 通过 + 断言(获取运行租约(库, "run-1", "worker-b", 300, 700) == 0,
+        "live_lease_blocks_other_owner");
+    变量 栅栏二: 整数 = 获取运行租约(库, "run-1", "worker-b", 601, 900);
+    通过 = 通过 + 断言(栅栏二 == 2, "expired_lease_increments_fence");
+    通过 = 通过 + 断言(追加运行事件(库, "run-1", "worker-a", 栅栏一, "created", "dispatching",
+        "running", "stale", 650, "{}") == 0, "stale_fence_rejected");
+
+    通过 = 通过 + 断言(追加运行事件(库, "run-1", "worker-b", 栅栏二, "created", "model",
+        "running", "model.started", 700, "{\"attempt\":1}") == 1, "first_event_seq");
+    通过 = 通过 + 断言(追加运行事件(库, "run-1", "worker-b", 栅栏二, "model", "tool",
+        "running", "tool.requested", 710, "{\"tool\":\"lookup\"}") == 2, "second_event_seq");
+    通过 = 通过 + 断言(追加运行事件(库, "run-1", "worker-b", 栅栏二, "tool", "complete",
+        "completed", "run.completed", 720, "{}") == 3, "third_event_seq");
+    变量 回放: 整数 = J.解码(列出运行事件(库, "run-1", 1));
+    通过 = 通过 + 断言(J.数组长度(回放) == 2
+        && J.获取整数(J.数组获取对象(回放, 0), "seq") == 2
+        && J.获取整数(J.数组获取对象(回放, 1), "seq") == 3,
+        "monotonic_replay_after_seq");
+
+    // Prepare a separate active run for attempt/tool/budget mutations.
+    创建代理运行(库, "run-2", "tenant-a", "session-a", "request-b", "hash-c", "model", 1000);
+    变量 栅栏三: 整数 = 获取运行租约(库, "run-2", "worker-c", 1010, 2000);
+    通过 = 通过 + 断言(创建模型尝试(库, "run-2", "worker-c", 栅栏三, "model", 1100,
+        "attempt-1", "step-1", 1, "pending", "unknown") == 1, "attempt_created");
+    通过 = 通过 + 断言(创建模型尝试(库, "run-2", "worker-c", 栅栏三, "model", 1100,
+        "attempt-1", "step-1", 1, "pending", "unknown") == 2, "attempt_create_idempotent");
+
+    通过 = 通过 + 断言(创建工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1110,
+        "tool-1", "step-1", "call-1", "charge-card", "args-hash", "", "dispatching") == 1,
+        "non_idempotent_tool_created");
+    通过 = 通过 + 断言(标记工具执行不确定(库, "run-2", "worker-c", 栅栏三, "model", 1120,
+        "tool-1", "{\"code\":\"connection_lost\"}") == 1, "ambiguous_tool_marked");
+    变量 工具行: 整数 = 首项(获取工具执行JSON(库, "tool-1"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(工具行, "status"), "ambiguous") == 1
+        && 字符串::等于(J.获取字符串(工具行, "external_commit_state"), "unknown") == 1
+        && 字符串::等于(J.获取字符串(工具行, "reconciliation_status"), "required") == 1,
+        "ambiguous_non_idempotent_tool_requires_reconciliation");
+
+    // Dispatch is durable before the external call. Duplicate keyed work never owns a
+    // second dispatch and completed work replays the stored result.
+    通过 = 通过 + 断言(创建工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1121,
+        "tool-idem-1", "step-1", "call-idem-1", "send-email", "same-args", "idem-1", "dispatching") == 1,
+        "dispatch_boundary_created_new");
+    变量 派发行: 整数 = 首项(获取工具执行JSON(库, "tool-idem-1"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(派发行, "status"), "dispatching") == 1
+        && J.获取整数(派发行, "dispatch_started_at") == 1121
+        && J.获取整数(派发行, "dispatch_lease_fence") == 栅栏三
+        && 字符串::等于(J.获取字符串(派发行, "external_commit_state"), "unknown") == 1,
+        "dispatch_boundary_is_durable_before_completion");
+    变量 进行中处置: 整数 = J.解码(处置重复工具执行JSON(库, "run-2", "worker-c", 栅栏三,
+        "model", 1122, "tool-idem-2", "send-email", "same-args", "idem-1"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(进行中处置, "disposition"), "existing") == 1,
+        "duplicate_idempotency_key_returns_existing");
+    J.删除(进行中处置);
+    通过 = 通过 + 断言(更新工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1123,
+        "tool-idem-1", "success", 1122, "committed", "not_required",
+        "{\"status\":\"success\",\"content\":\"sent\"}", "", 1122, 1123) == 1,
+        "fenced_tool_completion_persisted");
+    变量 完成行: 整数 = 首项(获取工具执行JSON(库, "tool-idem-1"));
+    通过 = 通过 + 断言(J.获取整数(完成行, "completion_lease_fence") == 栅栏三,
+        "completion_boundary_persists_lease_fence");
+    变量 完成处置: 整数 = J.解码(处置重复工具执行JSON(库, "run-2", "worker-c", 栅栏三,
+        "model", 1124, "tool-idem-2", "send-email", "same-args", "idem-1"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(完成处置, "disposition"), "replay") == 1
+        && 字符串::包含(J.获取字符串(完成处置, "result_json"), "sent") == 1,
+        "duplicate_idempotency_key_replays_completed_result");
+    J.删除(完成处置);
+    通过 = 通过 + 断言(创建工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1125,
+        "tool-idem-2", "step-1", "call-idem-2", "send-email", "same-args", "idem-1", "dispatching") == 2,
+        "duplicate_idempotency_key_not_newly_created");
+    通过 = 通过 + 断言(更新工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1125,
+        "tool-idem-1", "success", 1122, "committed", "not_required",
+        "{\"status\":\"success\",\"content\":\"sent\"}", "", 1122, 1123) == 0,
+        "duplicate_completion_cannot_rewrite_terminal_result");
+
+    // A crash after dispatch record creation but before completion is permanently unsafe
+    // for a non-idempotent call without a key.
+    通过 = 通过 + 断言(创建工具执行(库, "run-2", "worker-c", 栅栏三, "model", 1126,
+        "tool-crash", "step-1", "call-crash", "charge-card", "crash-args", "", "dispatching") == 1,
+        "crash_window_dispatch_recorded");
+    变量 崩溃处置: 整数 = J.解码(处置重复工具执行JSON(库, "run-2", "worker-c", 栅栏三,
+        "model", 1127, "tool-crash", "charge-card", "crash-args", ""));
+    变量 崩溃行: 整数 = 首项(获取工具执行JSON(库, "tool-crash"));
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(崩溃处置, "disposition"), "needs_reconciliation") == 1
+        && 字符串::等于(J.获取字符串(崩溃行, "status"), "ambiguous") == 1,
+        "non_idempotent_crash_window_never_redispatches");
+    J.删除(崩溃处置);
+
+    创建代理运行(库, "run-tool-fence", "tenant-a", "session-a", "request-tool-fence",
+        "hash-tool-fence", "model", 1300);
+    变量 工具旧栅栏: 整数 = 获取运行租约(库, "run-tool-fence", "old-worker", 1310, 1400);
+    通过 = 通过 + 断言(创建工具执行(库, "run-tool-fence", "old-worker", 工具旧栅栏,
+        "model", 1320, "tool-fenced", "step-1", "call-fenced", "write", "fenced-args", "idem-fenced",
+        "dispatching") == 1, "tool_dispatch_created_under_lease_fence");
+    变量 工具新栅栏: 整数 = 获取运行租约(库, "run-tool-fence", "new-worker", 1401, 2000);
+    通过 = 通过 + 断言(更新工具执行(库, "run-tool-fence", "old-worker", 工具旧栅栏,
+        "model", 1410, "tool-fenced", "success", 1320, "committed", "not_required",
+        "{\"status\":\"success\"}", "", 1320, 1410) == 0 && 工具新栅栏 == 2,
+        "stale_writer_cannot_persist_tool_completion");
+
+    通过 = 通过 + 断言(预留运行预算(库, "run-2", "worker-c", 栅栏三, "model", 1130,
+        "reservation-1", "attempt-1", "tenant-a", 1000, 2500, "estimated") == 1,
+        "budget_reserved");
+    通过 = 通过 + 断言(结算运行预算(库, "run-2", "worker-c", 栅栏三, "model", 1140,
+        "reservation-1", 700, 1800, "settled", "actual") == 1, "budget_settled");
+    通过 = 通过 + 断言(结算运行预算(库, "run-2", "worker-c", 栅栏三, "model", 1150,
+        "reservation-1", 700, 1800, "settled", "actual") == 2, "duplicate_settlement_idempotent");
+    通过 = 通过 + 断言(结算运行预算(库, "run-2", "worker-c", 栅栏三, "model", 1160,
+        "reservation-1", 701, 1800, "settled", "actual") == 0, "different_duplicate_settlement_conflicts");
+    变量 预算事件: 整数 = J.解码(列出运行事件(库, "run-2", 0));
+    通过 = 通过 + 断言(J.数组长度(预算事件) == 2
+        && 字符串::等于(J.获取字符串(J.数组获取对象(预算事件, 0), "type"), "budget.reserved") == 1
+        && 字符串::等于(J.获取字符串(J.数组获取对象(预算事件, 1), "type"), "budget.settled") == 1,
+        "budget_boundaries_are_transactional_events");
+
+    创建代理运行(库, "run-stale-budget", "tenant-a", "session-a", "request-stale-budget",
+        "hash-stale-budget", "model", 1000);
+    变量 预算旧栅栏: 整数 = 获取运行租约(库, "run-stale-budget", "worker-budget", 1010, 1200);
+    创建模型尝试(库, "run-stale-budget", "worker-budget", 预算旧栅栏, "model", 1100,
+        "attempt-stale-budget", "step-2", 1, "pending", "unknown");
+    预留运行预算(库, "run-stale-budget", "worker-budget", 预算旧栅栏, "model", 1110,
+        "reservation-stale", "attempt-stale-budget", "tenant-a", 400, 900, "estimated");
+    变量 接管栅栏: 整数 = 获取运行租约(库, "run-stale-budget", "worker-takeover", 1201, 3000);
+    通过 = 通过 + 断言(接管栅栏 > 预算旧栅栏
+        && 结算运行预算(库, "run-stale-budget", "worker-budget", 预算旧栅栏, "model", 1210,
+            "reservation-stale", 0, 0, "released", "not_sent") == 0
+        && 保守保留运行预算(库, "run-stale-budget", "reservation-stale", 1210) == 1,
+        "stale_fence_can_conservatively_retain_reservation");
+    变量 过期预算数组: 整数 = J.解码(获取运行预算JSON(库, "run-stale-budget"));
+    变量 过期预算行: 整数 = J.数组获取对象(过期预算数组, J.数组长度(过期预算数组) - 1);
+    通过 = 通过 + 断言(字符串::等于(J.获取字符串(过期预算行, "status"), "retained") == 1
+        && 字符串::等于(J.获取字符串(过期预算行, "usage_status"), "usage_unknown") == 1
+        && J.获取整数(过期预算行, "actual_tokens") == 400,
+        "stale_fence_retains_full_reserved_amount");
+
+    // Deferred FK failure occurs at COMMIT after both run update and event insert.
+    创建代理运行(库, "run-rollback", "tenant-a", "session-a", "request-c", "hash-d", "ready", 2000);
+    变量 栅栏四: 整数 = 获取运行租约(库, "run-rollback", "worker-d", 2010, 3000);
+    数据库.执行(库, "CREATE TABLE journal_deferred_parent (id TEXT PRIMARY KEY)");
+    数据库.执行(库, "CREATE TABLE journal_deferred_child (id TEXT, FOREIGN KEY(id) REFERENCES journal_deferred_parent(id) DEFERRABLE INITIALLY DEFERRED)");
+    数据库.执行(库, "CREATE TRIGGER journal_inject_commit_failure AFTER INSERT ON agent_run_events "
+        + "WHEN NEW.run_id = 'run-rollback' BEGIN INSERT INTO journal_deferred_child(id) VALUES ('missing'); END");
+    通过 = 通过 + 断言(追加运行事件(库, "run-rollback", "worker-d", 栅栏四, "ready", "changed",
+        "running", "must.rollback", 2100, "{}") == 0 - 1, "commit_failure_reported");
+    变量 回滚运行: 整数 = 首项(获取代理运行JSON(库, "run-rollback"));
+    通过 = 通过 + 断言(J.获取整数(回滚运行, "last_seq") == 0
+        && 字符串::等于(J.获取字符串(回滚运行, "current_state"), "ready") == 1
+        && J.数组长度(J.解码(列出运行事件(库, "run-rollback", 0))) == 0,
+        "transaction_rollback_restores_run_and_event");
+
+    通过 = 通过 + 断言(释放运行租约(库, "run-2", "worker-c", 栅栏三, 1200) == 1,
+        "lease_released");
+    通过 = 通过 + 断言(续期运行租约(库, "run-2", "worker-c", 栅栏三, 1210, 2200) == 0,
+        "released_lease_cannot_renew");
+
+    // Semantic commitment and event insertion roll back together in the crash window.
+    创建代理运行(库, "run-stream-rollback", "tenant-a", "session-a", "request-stream", "hash-stream", "streaming", 3000);
+    变量 栅栏五: 整数 = 获取运行租约(库, "run-stream-rollback", "worker-e", 3010, 4000);
+    数据库.执行(库, "DROP TRIGGER journal_inject_commit_failure");
+    数据库.执行(库, "CREATE TRIGGER journal_stream_commit_failure AFTER INSERT ON agent_run_events "
+        + "WHEN NEW.run_id = 'run-stream-rollback' BEGIN INSERT INTO journal_deferred_child(id) VALUES ('missing-stream'); END");
+    通过 = 通过 + 断言(追加流运行事件(库, "run-stream-rollback", "worker-e", 栅栏五,
+        "streaming", "STREAMING", "text.delta", 3100, "{\"text\":\"x\"}", 1) == 0 - 1,
+        "semantic_commit_crash_window_reported");
+    变量 流回滚行: 整数 = 首项(获取代理运行JSON(库, "run-stream-rollback"));
+    通过 = 通过 + 断言(J.获取整数(流回滚行, "partial_output_committed") == 0
+        && J.获取整数(流回滚行, "last_seq") == 0,
+        "semantic_commit_boundary_is_transactional");
+
+    // A takeover fence terminates once; stale writers and duplicate recovery cannot append.
+    创建代理运行(库, "run-recover", "tenant-a", "session-a", "request-recover", "hash-recover", "STREAMING", 4000);
+    变量 旧栅栏: 整数 = 获取运行租约(库, "run-recover", "dead", 4010, 4100);
+    追加流运行事件(库, "run-recover", "dead", 旧栅栏, "STREAMING", "STREAMING",
+        "text.delta", 4020, "{\"text\":\"visible\"}", 1);
+    变量 新栅栏: 整数 = 获取运行租约(库, "run-recover", "recovery", 4101, 5000);
+    通过 = 通过 + 断言(终结流运行(库, "run-recover", "dead", 旧栅栏, "STREAMING",
+        "FAILED", "failed", "run.failed", 4200, "{}", 1, "", "", "") == 0,
+        "stale_writer_cannot_terminal_after_takeover");
+    通过 = 通过 + 断言(恢复终结运行(库, "run-recover", "recovery", 新栅栏, "STREAMING",
+        4200, "INCOMPLETE", "incomplete", "run.incomplete", "{\"code\":\"recovered\"}") == 2,
+        "recovery_terminal_seq");
+    // seq 2 is also the idempotent disposition, so verify persisted state and no extra event.
+    通过 = 通过 + 断言(恢复终结运行(库, "run-recover", "recovery", 新栅栏, "STREAMING",
+        4210, "INCOMPLETE", "incomplete", "run.incomplete", "{\"code\":\"recovered\"}") == 2
+        && J.数组长度(J.解码(列出运行事件(库, "run-recover", 0))) == 2,
+        "duplicate_recovery_does_not_add_terminal");
+
+    关闭运行日志(库);
+    IO.删除文件(路径);
+    如果 (通过 == 47) { IO.打印行("PASS run_journal_total_47"); }
+    否则 { IO.打印行("FAIL run_journal_total=" + 整数转字符串(通过)); }
+}

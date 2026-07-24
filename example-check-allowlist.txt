@@ -1,0 +1,4 @@
+# FILE|PACKAGE|REASON
+examples/_http大请求复现.qi|Web|requires the optional qi-web package
+examples/seo审计/seo命令行.qi|CLI|requires the optional qi-cli package
+examples/seo审计/服务.qi|Web|requires the optional qi-web package

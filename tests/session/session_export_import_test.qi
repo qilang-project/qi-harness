@@ -1,0 +1,82 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 Harness.会话存储::{打开内存会话存储, 关闭会话存储, 创建持久会话,
+    追加用户消息, 追加助手消息, 设置当前会话叶, 当前会话叶, 当前会话路径,
+    加载会话条目, 导出持久会话JSON, 导入持久会话JSON, 会话存在};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 数组条目ID(数组值: 整数, 索引: 整数) : 字符串 {
+    返回 J.获取字符串(J.数组获取对象(数组值, 索引), "entry_id");
+}
+
+函数 入口() {
+    变量 通过: 整数 = 0;
+    变量 源库: 整数 = 打开内存会话存储();
+    变量 目标库: 整数 = 打开内存会话存储();
+    通过 = 通过 + 断言(源库 > 0 && 目标库 > 0, "memory_stores_opened");
+
+    创建持久会话(源库, "export-session");
+    变量 根: 字符串 = 追加用户消息(源库, "export-session", "root");
+    变量 旧中: 字符串 = 追加助手消息(源库, "export-session", "old answer");
+    变量 旧叶: 字符串 = 追加用户消息(源库, "export-session", "old follow-up");
+    设置当前会话叶(源库, "export-session", 根);
+    变量 新叶: 字符串 = 追加助手消息(源库, "export-session", "new answer");
+
+    变量 导出一: 字符串 = 导出持久会话JSON(源库, "export-session");
+    变量 导出二: 字符串 = 导出持久会话JSON(源库, "export-session");
+    通过 = 通过 + 断言(字符串::字节长度(导出一) > 0
+        && 字符串::等于(导出一, 导出二) == 1, "export_is_deterministic");
+    通过 = 通过 + 断言(导入持久会话JSON(目标库, 导出一) == 1, "round_trip_import_succeeds");
+    变量 再导出: 字符串 = 导出持久会话JSON(目标库, "export-session");
+    通过 = 通过 + 断言(字符串::等于(导出一, 再导出) == 1, "round_trip_preserves_exact_export");
+    通过 = 通过 + 断言(字符串::等于(当前会话叶(目标库, "export-session"), 新叶) == 1,
+        "round_trip_preserves_leaf");
+
+    变量 全部: 整数 = J.解码(加载会话条目(目标库, "export-session"));
+    通过 = 通过 + 断言(J.数组长度(全部) == 4
+        && 字符串::等于(数组条目ID(全部, 0), 根) == 1
+        && 字符串::等于(数组条目ID(全部, 1), 旧中) == 1
+        && 字符串::等于(数组条目ID(全部, 2), 旧叶) == 1
+        && 字符串::等于(数组条目ID(全部, 3), 新叶) == 1, "all_branches_and_ids_preserved");
+    变量 新路径: 整数 = J.解码(当前会话路径(目标库, "export-session"));
+    通过 = 通过 + 断言(J.数组长度(新路径) == 2
+        && 字符串::等于(数组条目ID(新路径, 0), 根) == 1
+        && 字符串::等于(数组条目ID(新路径, 1), 新叶) == 1, "selected_branch_parentage_preserved");
+    设置当前会话叶(目标库, "export-session", 旧叶);
+    变量 旧路径: 整数 = J.解码(当前会话路径(目标库, "export-session"));
+    通过 = 通过 + 断言(J.数组长度(旧路径) == 3
+        && 字符串::等于(数组条目ID(旧路径, 2), 旧叶) == 1, "alternate_branch_remains_selectable");
+
+    通过 = 通过 + 断言(导入持久会话JSON(目标库, 导出一) == 0 - 1,
+        "session_collision_is_reported");
+    通过 = 通过 + 断言(J.数组长度(J.解码(加载会话条目(目标库, "export-session"))) == 4,
+        "collision_does_not_modify_existing_session");
+    变量 条目碰撞导出: 字符串 = 字符串::替换(导出一, "export-session", "entry-collision-session");
+    通过 = 通过 + 断言(导入持久会话JSON(目标库, 条目碰撞导出) == 0 - 1,
+        "entry_id_collision_is_reported");
+    通过 = 通过 + 断言(会话存在(目标库, "entry-collision-session") == 0,
+        "entry_collision_does_not_create_partial_session");
+
+    变量 坏库: 整数 = 打开内存会话存储();
+    通过 = 通过 + 断言(导入持久会话JSON(坏库, "not-json") == 0,
+        "malformed_json_is_rejected");
+    通过 = 通过 + 断言(导入持久会话JSON(坏库,
+        "{\"version\":1,\"session_id\":\"bad-parent\",\"leaf_entry_id\":\"missing\",\"created_at\":1,\"entries\":[]}") == 0,
+        "invalid_leaf_reference_is_rejected");
+    通过 = 通过 + 断言(会话存在(坏库, "bad-parent") == 0,
+        "malformed_import_leaves_store_unchanged");
+
+    关闭会话存储(坏库);
+    关闭会话存储(目标库);
+    关闭会话存储(源库);
+    如果 (通过 == 15) { IO.打印行("PASS session_export_import_total_15"); }
+    否则 { IO.打印行("FAIL session_export_import_total=" + 整数转字符串(通过)); }
+}

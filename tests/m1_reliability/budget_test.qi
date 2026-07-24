@@ -1,0 +1,167 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 Harness::{大模型, 配置超时, 开启会话, 创建代理, 设置重试策略, 附加预算, 设置请求令牌预算, 取消请求令牌预算, 设置最大步数, 添加工具, 运行, 关闭代理, 工具};
+导入 Harness.代理::{代理};
+导入 Harness.预算::{创建预算, 已用令牌, 预算需对账, 预算超额令牌};
+导入 Harness.重试::{重试策略};
+
+函数 fixture_echo(参数: 字符串) : 字符串 {
+    返回 "fixture-result";
+}
+
+函数 单次重试策略() : 重试策略 {
+    返回 新建 重试策略 {
+        最大次数: 1,
+        起始延迟毫秒: 0,
+        最大延迟毫秒: 0,
+        倍数: 2,
+    };
+}
+
+函数 快代理(路径: 字符串, 预算句柄: 整数,
+           输入估算: 整数, 最大输出: 整数) : 代理 {
+    变量 配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + 路径, "fixture-key", "fixture-model");
+    配置 = 配置超时(配置, 2);
+    变量 代理值: 代理 = 创建代理("budget-test", 开启会话(配置));
+    代理值 = 设置重试策略(代理值, 单次重试策略());
+    代理值 = 附加预算(代理值, 预算句柄);
+    代理值 = 设置请求令牌预算(代理值, 输入估算, 最大输出, 0);
+    返回 代理值;
+}
+
+函数 入口() {
+    变量 普通预算: 整数 = 创建预算(6, 0);
+    变量 普通: 代理 = 快代理("/v1/budget", 普通预算, 4, 1);
+    变量 普通首答: 字符串 = 运行(普通, "first request");
+    变量 普通次答: 字符串 = 运行(普通, "must be blocked");
+    如果 (普通首答 == "first-ok") { IO.打印行("PASS budget_first_success"); }
+    否则 { IO.打印行("FAIL budget_first_response=" + 普通首答); }
+    如果 (已用令牌(普通预算) == 5) { IO.打印行("PASS budget_first_usage_recorded"); }
+    否则 { IO.打印行("FAIL budget_first_usage=" + 整数转字符串(已用令牌(普通预算))); }
+    如果 (普通次答 == "[harness] budget_exceeded") { IO.打印行("PASS one_token_remaining_rejects_large_response"); }
+    否则 { IO.打印行("FAIL budget_second_response=" + 普通次答); }
+    关闭代理(普通);
+
+    变量 精确预算: 整数 = 创建预算(5, 0);
+    变量 精确: 代理 = 快代理("/v1/exact", 精确预算, 4, 1);
+    变量 精确答: 字符串 = 运行(精确, "exact admitted bound");
+    如果 (精确答 == "exact-ok" && 已用令牌(精确预算) == 5) {
+        IO.打印行("PASS exact_bound_allowed");
+    } 否则 {
+        IO.打印行("FAIL exact_bound_response=" + 精确答
+            + " usage=" + 整数转字符串(已用令牌(精确预算)));
+    }
+    关闭代理(精确);
+
+    变量 工具预算: 整数 = 创建预算(12, 0);
+    变量 工具代理: 代理 = 快代理("/v1/tool", 工具预算, 4, 2);
+    工具代理 = 添加工具(工具代理, 新建 工具 {
+        名字: "fixture_echo",
+        描述: "return the deterministic fixture result",
+        参数schema: "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}",
+        处理: fixture_echo,
+    });
+    变量 工具首答: 字符串 = 运行(工具代理, "call the fixture tool");
+    变量 工具次答: 字符串 = 运行(工具代理, "must be blocked after continuation usage");
+    如果 (工具首答 == "tool-finished") { IO.打印行("PASS tool_initial_and_continuation"); }
+    否则 { IO.打印行("FAIL tool_first_response=" + 工具首答); }
+    如果 (已用令牌(工具预算) == 11) { IO.打印行("PASS tool_both_usages_recorded"); }
+    否则 { IO.打印行("FAIL tool_usage=" + 整数转字符串(已用令牌(工具预算))); }
+    如果 (工具次答 == "[harness] budget_exceeded") { IO.打印行("PASS tool_next_request_blocked"); }
+    否则 { IO.打印行("FAIL tool_second_response=" + 工具次答); }
+    关闭代理(工具代理);
+
+    变量 重试成功预算: 整数 = 创建预算(10, 0);
+    变量 重试成功代理: 代理 = 快代理("/v1/retry-success", 重试成功预算, 4, 1);
+    变量 两次策略: 重试策略 = 新建 重试策略 {
+        最大次数: 2,
+        起始延迟毫秒: 0,
+        最大延迟毫秒: 0,
+        倍数: 2,
+    };
+    重试成功代理 = 设置重试策略(重试成功代理, 两次策略);
+    变量 重试成功答: 字符串 = 运行(重试成功代理, "retry once then succeed");
+    如果 (重试成功答 == "retry-ok" && 已用令牌(重试成功预算) == 10) {
+        IO.打印行("PASS retries_reserve_each_attempt");
+    } 否则 {
+        IO.打印行("FAIL retry_success_response=" + 重试成功答
+            + " usage=" + 整数转字符串(已用令牌(重试成功预算)));
+    }
+    关闭代理(重试成功代理);
+
+    变量 耗尽预算: 整数 = 创建预算(15, 0);
+    变量 耗尽代理: 代理 = 快代理("/v1/retry-exhausted", 耗尽预算, 4, 1);
+    变量 三次策略: 重试策略 = 新建 重试策略 {
+        最大次数: 3,
+        起始延迟毫秒: 0,
+        最大延迟毫秒: 0,
+        倍数: 2,
+    };
+    耗尽代理 = 设置重试策略(耗尽代理, 三次策略);
+    变量 耗尽答: 字符串 = 运行(耗尽代理, "exhaust retries");
+    如果 (字符串::包含(耗尽答, "503") == 1 && 已用令牌(耗尽预算) == 15) {
+        IO.打印行("PASS exhausted_retries_each_attempt_charged");
+    } 否则 {
+        IO.打印行("FAIL exhausted_response=" + 耗尽答
+            + " usage=" + 整数转字符串(已用令牌(耗尽预算)));
+    }
+    关闭代理(耗尽代理);
+
+    变量 超额预算: 整数 = 创建预算(5, 0);
+    变量 超额代理: 代理 = 快代理("/v1/overrun", 超额预算, 4, 1);
+    变量 超额首答: 字符串 = 运行(超额代理, "provider must honor one output token");
+    变量 超额次答: 字符串 = 运行(超额代理, "must remain blocked pending reconciliation");
+    如果 (字符串::包含(超额首答, "budget_overrun") == 1
+        && 字符串::包含(超额首答, "needs_reconciliation") == 1
+        && 已用令牌(超额预算) == 6
+        && 预算需对账(超额预算) == 1
+        && 预算超额令牌(超额预算) == 1) {
+        IO.打印行("PASS provider_overrun_detected");
+    } 否则 {
+        IO.打印行("FAIL provider_overrun_response=" + 超额首答
+            + " usage=" + 整数转字符串(已用令牌(超额预算))
+            + " reconciliation=" + 整数转字符串(预算需对账(超额预算)));
+    }
+    如果 (字符串::包含(超额次答, "needs_reconciliation") == 1) {
+        IO.打印行("PASS provider_overrun_blocks_further_calls");
+    } 否则 { IO.打印行("FAIL provider_overrun_second_response=" + 超额次答); }
+    关闭代理(超额代理);
+
+    变量 策略配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + "/v1/policy",
+        "fixture-key", "fixture-model");
+    策略配置 = 配置超时(策略配置, 2);
+    变量 共享会话: 整数 = 开启会话(策略配置);
+    变量 策略代理: 代理 = 创建代理("policy-explicit", 共享会话);
+    策略代理 = 设置重试策略(策略代理, 单次重试策略());
+    策略代理 = 设置请求令牌预算(策略代理, 4, 1, 0);
+    变量 策略副本: 代理 = 策略代理;
+    策略副本 = 设置最大步数(策略副本, 3);
+    变量 副本答: 字符串 = 运行(策略副本, "copy");
+    如果 (副本答 == "policy-ok") { IO.打印行("PASS request_policy_survives_copy_and_builder"); }
+    否则 { IO.打印行("FAIL request_policy_copy_response=" + 副本答); }
+
+    策略副本 = 设置请求令牌预算(策略副本, 0 - 1, 1, 0);
+    变量 隔离代理: 代理 = 创建代理("policy-isolated", 共享会话);
+    隔离代理 = 设置重试策略(隔离代理, 单次重试策略());
+    变量 隔离答: 字符串 = 运行(隔离代理, "x");
+    如果 (隔离答 == "policy-ok") { IO.打印行("PASS request_policy_isolated_per_agent"); }
+    否则 { IO.打印行("FAIL request_policy_isolation_response=" + 隔离答); }
+
+    策略副本 = 取消请求令牌预算(策略副本);
+    变量 取消答: 字符串 = 运行(策略副本, "x");
+    如果 (取消答 == "policy-ok") { IO.打印行("PASS cancelling_request_policy_restores_automatic_envelope"); }
+    否则 { IO.打印行("FAIL request_policy_cancel_response=" + 取消答); }
+    策略副本 = 设置请求令牌预算(策略副本, 0 - 1, 1, 0);
+    关闭代理(策略副本);
+    关闭代理(隔离代理);
+
+    变量 新会话: 整数 = 开启会话(策略配置);
+    变量 新代理: 代理 = 创建代理("policy-after-close", 新会话);
+    新代理 = 设置重试策略(新代理, 单次重试策略());
+    变量 新答: 字符串 = 运行(新代理, "x");
+    如果 (新答 == "policy-ok") { IO.打印行("PASS closing_agent_clears_stale_request_policy"); }
+    否则 { IO.打印行("FAIL request_policy_after_close_response=" + 新答); }
+    关闭代理(新代理);
+}

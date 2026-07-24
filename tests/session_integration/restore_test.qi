@@ -1,0 +1,58 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.大模型 作为 底层模型;
+导入 标准库.JSON 作为 J;
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 创建持久会话,
+    追加用户消息, 追加助手原始消息, 追加助手最终消息, 当前会话叶,
+    设置当前会话叶, 恢复会话到运行时};
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 历史内容(会话: 整数, 索引: 整数) : 字符串 {
+    变量 历史: 整数 = J.解码(底层模型.历史JSON(会话));
+    返回 J.获取字符串(J.数组获取对象(历史, 索引), "content");
+}
+
+函数 入口() {
+    变量 路径: 字符串 = "/tmp/qi_harness_agent_restore_test.db";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+    变量 通过: 整数 = 0;
+    变量 库: 整数 = 打开会话存储(路径);
+    创建持久会话(库, "restore-session");
+    变量 根: 字符串 = 追加用户消息(库, "restore-session", "root prompt");
+    变量 旧叶: 字符串 = 追加助手原始消息(库, "restore-session",
+        "{\"role\":\"assistant\",\"content\":\"old answer\"}");
+    追加助手最终消息(库, "restore-session", "old answer");
+    设置当前会话叶(库, "restore-session", 根);
+    变量 新叶: 字符串 = 追加助手原始消息(库, "restore-session",
+        "{\"role\":\"assistant\",\"content\":\"new answer\"}");
+    追加助手最终消息(库, "restore-session", "new answer");
+    关闭会话存储(库);
+
+    库 = 打开会话存储(路径);
+    变量 会话: 整数 = 底层模型.创建会话("http://127.0.0.1:43510/v1", "fixture", "key");
+    通过 = 通过 + 断言(恢复会话到运行时(库, "restore-session", 会话) == 2, "reopen_restore_count");
+    通过 = 通过 + 断言(字符串::等于(历史内容(会话, 0), "root prompt") == 1,
+        "restore_keeps_root_user");
+    通过 = 通过 + 断言(字符串::等于(历史内容(会话, 1), "new answer") == 1,
+        "restore_uses_selected_new_branch");
+
+    设置当前会话叶(库, "restore-session", 旧叶);
+    通过 = 通过 + 断言(恢复会话到运行时(库, "restore-session", 会话) == 2, "branch_restore_count");
+    通过 = 通过 + 断言(字符串::等于(历史内容(会话, 1), "old answer") == 1,
+        "branch_selection_reflected_on_next_restore");
+    通过 = 通过 + 断言(字符串::等于(当前会话叶(库, "restore-session"), 旧叶) == 1
+        && 字符串::等于(新叶, 旧叶) == 0, "branches_remain_distinct");
+
+    底层模型.关闭会话(会话);
+    关闭会话存储(库);
+    IO.删除文件(路径);
+    如果 (通过 == 6) { IO.打印行("PASS restore_total_6"); }
+    否则 { IO.打印行("FAIL restore_total=" + 整数转字符串(通过)); }
+}

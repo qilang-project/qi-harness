@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QI_WEB_REF: 120576d4c53888535e1ef617510fc3d340d2e640
+  QI_SOURCE_REF: 05568a72a92698502fe006bd3223536e9cb04887
+  QI_RUNTIME_SOURCE_REF: ceada461d2aca568b2b3788f3b310fcc07748423
+  QI_GUI_SOURCE_REF: 825802276688a528fcad53f831a92f8e35f89963
+
+jobs:
+  quality:
+    name: Quality gate (${{ matrix.os }})
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Build pinned Qi source
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$("$GITHUB_WORKSPACE/scripts/install-qi-source.sh")"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Bootstrap Qi package siblings
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages="${RUNNER_TEMP}/qi_packages"
+          mkdir -p "$packages"
+          ln -s "$GITHUB_WORKSPACE" "$packages/Harness"
+          git clone --quiet https://github.com/qilang-project/qi-web.git "$packages/Web"
+          git -C "$packages/Web" checkout --quiet "$QI_WEB_REF"
+          echo "QI_PACKAGES_PATH=$packages" >> "$GITHUB_ENV"
+
+      - name: Verify toolchain
+        run: python3 "$GITHUB_WORKSPACE/scripts/check-qi-compat.py"
+
+      # Keep CI and local release validation on the same entry point.
+      - name: Run full quality gate
+        env:
+          QI_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        working-directory: ${{ runner.temp }}
+        run: "$GITHUB_WORKSPACE/run-offline-tests.sh"

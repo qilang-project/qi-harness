@@ -1,6 +1,11 @@
-# SEO/GEO 审计器（qi-web + qi-harness 综合示例）
+# SEO/GEO 审计器（qi-web + qi-harness 本地综合示例）
 
 输入 URL → Playwright MCP 真实抓取页面 → LLM 给 SEO/GEO 评分与修改建议。
+
+> 这是绑定 `127.0.0.1` 的本地演示，不是可直接暴露到公网的抓取服务。代码仅接受
+> `http/https`，并拒绝明显的 localhost、回环、链路本地、常见私网地址和含凭据 URL；这只是
+> 基础拦截，**不构成完整 SSRF 防护**。生产实现还必须校验 DNS 解析结果和每次重定向、限制出站
+> 网络、设置抓取超时/响应大小上限，并使用认证、限流和隔离的浏览器环境。
 
 ## 前置
 
@@ -33,12 +38,11 @@ curl -s -X POST http://127.0.0.1:43517/api/audit \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://example.com"}'
 
-# ——— 方式 B：HTTP 传输（更快，浏览器进程复用）———
+# ——— 方式 B：HTTP 传输（浏览器进程复用）———
 # 先起一台常驻 Playwright MCP（host 必须 localhost）：
 npx -y @playwright/mcp@latest --port 43528
 # 再用 QI_MCP_URL 指向它启动服务（设了就走 HTTP，没设走 stdio）：
 QI_MCP_URL=http://localhost:43528/mcp QI_LLM_KEY=sk-... $QI run 服务.qi
-# 简单页面快很多（实测 example.com ~9s）；
 # ⚠️ 重型 SPA 的大 browser_evaluate 在纯 Qi 的 SSE 处理下偶有 mcp_no_response，
 #    遇到不稳就用方式 A（stdio）。
 ```
@@ -55,14 +59,15 @@ QI_MCP_URL=http://localhost:43528/mcp QI_LLM_KEY=sk-... $QI run 服务.qi
                   ├─ 装备MCP(代理值, mcp描述符)  ← 自动注册 Playwright 工具
                   └─ 运行(代理值, "审计 <url>")
                          ├─ browser_navigate → 一次 browser_evaluate 采全部信号
-                         └─ 返回 JSON 报告（剥离 ```json 围栏）
+                         └─ 剥离 ```json 围栏并验证 JSON 与顶层必需字段后返回
 ```
 
 ## 注意
 
-- **传输选择**：设了 `QI_MCP_URL` → HTTP（复用常驻 server，快）；否则 stdio（每请求 spawn，稳）。
+- **传输选择**：设了 `QI_MCP_URL` → HTTP（复用常驻 server）；否则 stdio（每请求 spawn）。两种方式都可能受页面、浏览器和 MCP 状态影响。
 - **步数**：`设置最大步数(代理值, 20)`——复杂 SPA 的采集会多轮调用工具，默认 10 步会触发「tool 循环达到上限」。
 - **提示**：系统提示要求模型「只用一次 browser_evaluate 一次性采全部信号、拿到后不再调工具」，减少轮次、提升稳定。
 - 路由路径使用 ASCII（`/api/audit`），qi-web 运行时对中文路径有字节边界限制。
 - 全局字符串常量在 qi codegen 有已知限制；端口/主机/URL 用函数局部变量。
 - HTTP 传输的已知边界：纯 Qi 的 SSE 处理对重型页面的大 `browser_evaluate` 偶有不稳（`mcp_no_response` 后 `Session not found`）；这种页面用 stdio。
+- 输出检查只能确认合法 JSON 且含 `seo分数`、`geo分数`、`维度`、`建议` 顶层键，不验证完整 JSON Schema 或分数范围。

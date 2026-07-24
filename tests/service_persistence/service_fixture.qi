@@ -1,0 +1,67 @@
+包 主程序;
+
+导入 标准库.操作系统 作为 系统;
+导入 标准库.时间;
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 Harness.代理服务::{配置服务, 配置服务持久会话, 配置服务请求上限,
+    配置服务静态Bearer, 配置服务匿名开发模式, 配置服务安全记录,
+    配置服务会话租约, 服务注册工具, 启动代理服务};
+导入 Harness.工具::{工具};
+
+函数 fixture_tool(参数JSON: 字符串) : 字符串 {
+    变量 阻塞路径: 字符串 = 系统.获取环境变量("QI_TEST_BLOCK_TOOL_FILE");
+    如果 (字符串::字节长度(阻塞路径) > 0) {
+        IO.追加文件(阻塞路径 + ".entered", "1");
+        当 (IO.文件存在(阻塞路径 + ".release") == 0) {
+            时间.睡眠毫秒(10);
+        }
+    }
+    返回 "fixture-result";
+}
+
+函数 入口() {
+    配置服务(
+        系统.获取环境变量("QI_TEST_URL"),
+        "fixture-key",
+        "fixture-model",
+        ""
+    );
+    如果 (系统.获取环境变量("QI_TEST_SESSION_DB") != "") {
+        配置服务持久会话(
+            系统.获取环境变量("QI_TEST_SESSION_DB"),
+            ""
+        );
+    }
+    配置服务请求上限(256, 32);
+    如果 (系统.获取环境变量("QI_TEST_LEASE_MS") != "") {
+        配置服务会话租约(字符串转整数(系统.获取环境变量("QI_TEST_LEASE_MS")));
+    }
+    配置服务安全记录(系统.获取环境变量("QI_TEST_AUDIT_LOG"), 60000);
+    配置服务静态Bearer("token-a", "subject-a", "tenant-a", "agent_user",
+        "service.create,service.chat,service.json,service.replay,service.cancel",
+        时间.当前毫秒() + 3600000, 100, 1);
+    配置服务静态Bearer("token-b", "subject-b", "tenant-b", "agent_user",
+        "service.create,service.chat,service.json,service.replay,service.cancel",
+        时间.当前毫秒() + 3600000, 100, 2);
+    配置服务静态Bearer("token-takeover", "subject-takeover", "tenant-a", "agent_user",
+        "service.create,service.chat,service.json,service.replay,service.cancel",
+        时间.当前毫秒() + 3600000, 100, 2);
+    配置服务静态Bearer("token-expired", "subject-expired", "tenant-a", "agent_user",
+        "service.chat", 时间.当前毫秒() - 1, 100, 1);
+    配置服务静态Bearer("token-quota", "subject-quota", "tenant-quota", "agent_user",
+        "service.create,service.chat", 时间.当前毫秒() + 3600000, 1, 1);
+    配置服务静态Bearer("token-concurrent", "subject-concurrent", "tenant-concurrent", "agent_user",
+        "service.create,service.chat", 时间.当前毫秒() + 3600000, 100, 1);
+    如果 (系统.获取环境变量("QI_TEST_ANONYMOUS_DEV") == "1") {
+        配置服务匿名开发模式(1, "tenant-dev",
+            字符串转整数(系统.获取环境变量("QI_TEST_DEV_REQUEST_QUOTA")), 1);
+    }
+    服务注册工具(新建 工具 {
+        名字: "fixture_tool",
+        描述: "deterministic service fixture tool",
+        参数schema: "{\"type\":\"object\"}",
+        处理: fixture_tool,
+    });
+    启动代理服务("127.0.0.1", 字符串转整数(系统.获取环境变量("QI_TEST_SERVICE_PORT")));
+}

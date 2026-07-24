@@ -1,0 +1,316 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.时间;
+导入 标准库.JSON 作为 J;
+导入 标准库.数据库;
+导入 Harness::{大模型, 开启会话, 创建代理, 添加工具, 添加受控工具, 运行, 关闭代理,
+    工具, 工具执行策略, 工具调用上下文, 工具结果, 受控工具,
+    默认工具执行策略, 并行只读工具策略, 创建受控工具, 适配旧工具,
+    工具文本结果, 工具失败结果, 工具取消结果};
+导入 Harness.受控工具::{请求工具取消};
+导入 Harness.代理::{代理};
+导入 Harness.代理::{附加运行日志上下文};
+导入 Harness.工具::{设置执行模式};
+导入 Harness.事件::{订阅生命周期事件, 清空生命周期订阅者};
+导入 Harness.运行日志::{打开运行日志, 关闭运行日志, 创建代理运行, 获取运行租约,
+    获取工具执行JSON};
+
+变量 阶段: 整数 = 0;
+变量 顺序违规: 整数 = 0;
+变量 工具事件顺序: 字符串 = "";
+变量 受控阶段: 整数 = 0;
+变量 受控违规: 整数 = 0;
+变量 日志处理次数: 整数 = 0;
+
+函数 慢甲(参数: 字符串) : 字符串 {
+    时间.睡眠毫秒(300);
+    返回 "result-A";
+}
+
+函数 慢乙(参数: 字符串) : 字符串 {
+    时间.睡眠毫秒(300);
+    返回 "result-B";
+}
+
+函数 串行甲(参数: 字符串) : 字符串 {
+    如果 (阶段 != 0) { 顺序违规 = 1; }
+    阶段 = 1;
+    时间.睡眠毫秒(250);
+    阶段 = 2;
+    返回 "serial-A";
+}
+
+函数 串行乙(参数: 字符串) : 字符串 {
+    如果 (阶段 != 2) { 顺序违规 = 1; }
+    阶段 = 3;
+    返回 "serial-B";
+}
+
+函数 受控甲(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    如果 (受控阶段 != 0) { 受控违规 = 1; }
+    时间.睡眠毫秒(180);
+    返回 工具文本结果("controlled-A");
+}
+
+函数 受控乙(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    如果 (受控阶段 != 0) { 受控违规 = 1; }
+    时间.睡眠毫秒(180);
+    返回 工具文本结果("controlled-B");
+}
+
+函数 受控串行(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    如果 (受控阶段 != 0) { 受控违规 = 1; }
+    受控阶段 = 1;
+    时间.睡眠毫秒(80);
+    受控阶段 = 2;
+    返回 工具文本结果("controlled-serial");
+}
+
+函数 受控丙(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    如果 (受控阶段 != 2) { 受控违规 = 1; }
+    受控阶段 = 3;
+    时间.睡眠毫秒(100);
+    受控阶段 = 4;
+    返回 工具文本结果("controlled-C");
+}
+
+函数 受控丁(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    如果 (受控阶段 != 4) { 受控违规 = 1; }
+    受控阶段 = 5;
+    返回 工具文本结果("controlled-D");
+}
+
+函数 旧投影(参数: 字符串) : 字符串 { 返回 "legacy-visible:" + 参数; }
+
+函数 受控取消(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    请求工具取消(ctx.控制句柄, "operator");
+    返回 工具取消结果("operator");
+}
+
+函数 受控超时(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    时间.睡眠毫秒(80);
+    返回 工具文本结果("too-late");
+}
+
+函数 受控不确定(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    变量 结果值: 工具结果 = 工具失败结果("connection_lost", "commit outcome unknown", 1);
+    结果值.状态 = "ambiguous";
+    返回 结果值;
+}
+
+函数 受控日志计数(ctx: 工具调用上下文, 参数: 字符串) : 工具结果 {
+    日志处理次数 = 日志处理次数 + 1;
+    返回 工具文本结果("journal-counted");
+}
+
+函数 新受控(名字: 字符串, 处理: 函数(工具调用上下文, 字符串): 工具结果,
+          策略值: 工具执行策略) : 受控工具 {
+    返回 创建受控工具(名字, 名字, "{\"type\":\"object\"}", 处理, 策略值);
+}
+
+函数 记录工具事件(事件JSON: 字符串) : 整数 {
+    变量 根: 整数 = J.解码(事件JSON);
+    变量 类型值: 字符串 = J.获取字符串(根, "type");
+    如果 (字符串::等于(类型值, "tool_start") == 1
+        || 字符串::等于(类型值, "tool_end") == 1
+        || 字符串::等于(类型值, "tool_timeout") == 1) {
+        如果 (字符串::字节长度(工具事件顺序) > 0) {
+            工具事件顺序 = 工具事件顺序 + ",";
+        }
+        工具事件顺序 = 工具事件顺序 + 类型值 + ":" + J.获取字符串(根, "step_id");
+    }
+    J.删除(根);
+    返回 1;
+}
+
+函数 断言(条件: 整数, 名字: 字符串) {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); }
+    否则 { IO.打印行("FAIL " + 名字); }
+}
+
+函数 新代理(路径: 字符串, 名字: 字符串) : 代理 {
+    变量 配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + 路径, "fixture-key", "fixture-model");
+    返回 创建代理(名字, 开启会话(配置));
+}
+
+函数 入口() {
+    清空生命周期订阅者();
+    订阅生命周期事件(记录工具事件, 0);
+
+    变量 并发代理: 代理 = 新代理("/v1/parallel", "parallel-scheduling-test");
+    并发代理 = 添加工具(并发代理, 新建 工具 {
+        名字: "slow_a", 描述: "slow a", 参数schema: "{\"type\":\"object\"}", 处理: 慢甲,
+    });
+    并发代理 = 添加工具(并发代理, 新建 工具 {
+        名字: "slow_b", 描述: "slow b", 参数schema: "{\"type\":\"object\"}", 处理: 慢乙,
+    });
+    变量 并发开始: 整数 = 时间.现在毫秒();
+    变量 并发回复: 字符串 = 运行(并发代理, "run parallel tools");
+    变量 并发耗时: 整数 = 时间.现在毫秒() - 并发开始;
+    断言(字符串::等于(并发回复, "parallel-aligned"), "parallel_results_aligned");
+    断言(并发耗时 < 520, "parallel_tools_overlap_measurably");
+    断言(字符串::等于(工具事件顺序,
+        "tool_start:step-0-tool-0,tool_start:step-0-tool-1,tool_end:step-0-tool-0,tool_end:step-0-tool-1"),
+        "parallel_lifecycle_events");
+    关闭代理(并发代理);
+
+    工具事件顺序 = "";
+    阶段 = 0;
+    顺序违规 = 0;
+    变量 串行代理: 代理 = 新代理("/v1/serial", "serial-scheduling-test");
+    串行代理 = 添加工具(串行代理, 新建 工具 {
+        名字: "serial_a", 描述: "serial a", 参数schema: "{\"type\":\"object\"}", 处理: 串行甲,
+    });
+    串行代理 = 添加工具(串行代理, 新建 工具 {
+        名字: "serial_b", 描述: "serial b", 参数schema: "{\"type\":\"object\"}", 处理: 串行乙,
+    });
+    串行代理.工具表 = 设置执行模式(串行代理.工具表, "serial_a", 1);
+    变量 串行回复: 字符串 = 运行(串行代理, "run serial tools");
+    断言(字符串::等于(串行回复, "serial-aligned"), "serial_results_aligned");
+    断言(顺序违规 == 0 && 阶段 == 3, "serial_declaration_prevents_overlap_and_order_violation");
+    断言(字符串::等于(工具事件顺序,
+        "tool_start:step-0-tool-0,tool_end:step-0-tool-0,tool_start:step-0-tool-1,tool_end:step-0-tool-1"),
+        "serial_lifecycle_events");
+    关闭代理(串行代理);
+
+    工具事件顺序 = "";
+    受控阶段 = 0;
+    受控违规 = 0;
+    变量 受控代理: 代理 = 新代理("/v1/controlled", "controlled-scheduling-test");
+    变量 并行策略: 工具执行策略 = 并行只读工具策略();
+    变量 同键策略: 工具执行策略 = 并行只读工具策略();
+    同键策略.并发键 = "shared";
+    受控代理 = 添加受控工具(受控代理, 新受控("controlled_a", 受控甲, 并行策略));
+    受控代理 = 添加受控工具(受控代理, 新受控("controlled_b", 受控乙, 并行策略));
+    受控代理 = 添加受控工具(受控代理, 新受控("controlled_serial", 受控串行, 默认工具执行策略()));
+    受控代理 = 添加受控工具(受控代理, 新受控("controlled_c", 受控丙, 同键策略));
+    受控代理 = 添加受控工具(受控代理, 新受控("controlled_d", 受控丁, 同键策略));
+    变量 受控回复: 字符串 = 运行(受控代理, "run controlled tools");
+    断言(字符串::等于(受控回复, "controlled-aligned"), "controlled_results_preserve_call_order");
+    断言(受控违规 == 0 && 受控阶段 == 5,
+        "controlled_serial_barrier_and_concurrency_key_prevent_overlap");
+    变量 屏障开始位: 整数 = 字符串::查找(工具事件顺序, "tool_start:step-0-tool-2");
+    变量 丙开始位: 整数 = 字符串::查找(工具事件顺序, "tool_start:step-0-tool-3");
+    变量 丁开始位: 整数 = 字符串::查找(工具事件顺序, "tool_start:step-0-tool-4");
+    断言(字符串::查找(工具事件顺序, "tool_start:step-0-tool-0") >= 0
+        && 字符串::查找(工具事件顺序, "tool_start:step-0-tool-1") >= 0
+        && 字符串::查找(工具事件顺序, "tool_end:step-0-tool-0") < 屏障开始位
+        && 字符串::查找(工具事件顺序, "tool_end:step-0-tool-1") < 屏障开始位
+        && 字符串::查找(工具事件顺序, "tool_end:step-0-tool-2") < 丙开始位
+        && 字符串::查找(工具事件顺序, "tool_end:step-0-tool-3") < 丁开始位,
+        "controlled_lifecycle_reflects_actual_wave_completion");
+    关闭代理(受控代理);
+
+    工具事件顺序 = "";
+    变量 状态代理: 代理 = 新代理("/v1/controlled-status", "controlled-status-test");
+    变量 旧值: 工具 = 新建 工具 {
+        名字: "legacy_controlled", 描述: "legacy", 参数schema: "{\"type\":\"object\"}", 处理: 旧投影,
+    };
+    状态代理 = 添加受控工具(状态代理, 适配旧工具(旧值));
+    状态代理 = 添加受控工具(状态代理,
+        新受控("cancelled_controlled", 受控取消, 默认工具执行策略()));
+    断言(字符串::等于(运行(状态代理, "projection and cancellation"),
+        "controlled-status-aligned"), "controlled_legacy_projection_and_cancel_status");
+    关闭代理(状态代理);
+
+    工具事件顺序 = "";
+    变量 超时代理: 代理 = 新代理("/v1/controlled-timeout", "controlled-timeout-test");
+    变量 超时策略: 工具执行策略 = 默认工具执行策略();
+    超时策略.超时毫秒 = 20;
+    超时代理 = 添加受控工具(超时代理, 新受控("timeout_controlled", 受控超时, 超时策略));
+    变量 超时开始: 整数 = 时间.现在毫秒();
+    断言(字符串::等于(运行(超时代理, "cooperative timeout"), "controlled-timeout-aligned"),
+        "controlled_cooperative_timeout_projection");
+    断言(时间.现在毫秒() - 超时开始 >= 70,
+        "in_process_timeout_waits_for_cooperative_handler_return");
+    断言(字符串::包含(工具事件顺序, "tool_timeout:step-0-tool-0") == 1,
+        "controlled_timeout_lifecycle_event");
+    关闭代理(超时代理);
+
+    变量 不确定代理: 代理 = 新代理("/v1/controlled-ambiguous", "controlled-ambiguous-test");
+    不确定代理 = 添加受控工具(不确定代理,
+        新受控("ambiguous_controlled", 受控不确定, 默认工具执行策略()));
+    断言(字符串::等于(运行(不确定代理, "ambiguous non-idempotent"),
+        "controlled-ambiguous-aligned"), "ambiguous_non_idempotent_needs_reconciliation");
+    关闭代理(不确定代理);
+
+    变量 日志路径: 字符串 = "/tmp/qi_harness_controlled_agent_journal.db";
+    如果 (IO.文件存在(日志路径) == 1) { IO.删除文件(日志路径); }
+    变量 日志库: 整数 = 打开运行日志(日志路径);
+    创建代理运行(日志库, "controlled-run", "tenant", "session", "request",
+        "request-hash", "model", 时间.现在毫秒());
+    变量 栅栏: 整数 = 获取运行租约(日志库, "controlled-run", "worker",
+        时间.现在毫秒(), 时间.现在毫秒() + 5000);
+    变量 日志代理: 代理 = 新代理("/v1/controlled-ambiguous", "controlled-journal-test");
+    日志代理 = 附加运行日志上下文(日志代理, 日志库, "controlled-run", "worker", 栅栏, "model");
+    日志代理 = 添加受控工具(日志代理,
+        新受控("ambiguous_controlled", 受控不确定, 默认工具执行策略()));
+    运行(日志代理, "journal ambiguous outcome");
+    变量 执行组: 整数 = J.解码(获取工具执行JSON(日志库, "controlled-run:call_0"));
+    变量 执行行: 整数 = J.数组获取对象(执行组, 0);
+    断言(J.数组长度(执行组) == 1
+        && 字符串::等于(J.获取字符串(执行行, "status"), "ambiguous") == 1
+        && 字符串::等于(J.获取字符串(执行行, "reconciliation_status"), "required") == 1
+        && 字符串::等于(J.获取字符串(执行行, "idempotency_key"), "") == 1,
+        "controlled_journal_receives_side_effect_idempotency_and_reconciliation");
+    J.删除(执行组);
+    关闭代理(日志代理);
+    关闭运行日志(日志库);
+    IO.删除文件(日志路径);
+
+    // A duplicate idempotent dispatch replays the durable result and does not call the
+    // handler twice, even across separate Agent.run invocations.
+    变量 重放路径: 字符串 = "/tmp/qi_harness_controlled_replay_journal.db";
+    如果 (IO.文件存在(重放路径) == 1) { IO.删除文件(重放路径); }
+    变量 重放库: 整数 = 打开运行日志(重放路径);
+    创建代理运行(重放库, "replay-run", "tenant", "session", "request-replay",
+        "request-hash", "model", 时间.现在毫秒());
+    变量 重放栅栏: 整数 = 获取运行租约(重放库, "replay-run", "worker",
+        时间.现在毫秒(), 时间.现在毫秒() + 5000);
+    变量 重放策略: 工具执行策略 = 默认工具执行策略();
+    重放策略.副作用模式 = 1;
+    重放策略.幂等键模式 = 1;
+    日志处理次数 = 0;
+    变量 重放代理一: 代理 = 新代理("/v1/controlled-journal-success", "controlled-replay-1");
+    重放代理一 = 附加运行日志上下文(重放代理一, 重放库, "replay-run", "worker", 重放栅栏, "model");
+    重放代理一 = 添加受控工具(重放代理一,
+        新受控("journal_controlled", 受控日志计数, 重放策略));
+    断言(字符串::等于(运行(重放代理一, "first dispatch"), "controlled-journal-success-aligned"),
+        "journal_first_dispatch_completes");
+    关闭代理(重放代理一);
+    变量 重放代理二: 代理 = 新代理("/v1/controlled-journal-success", "controlled-replay-2");
+    重放代理二 = 附加运行日志上下文(重放代理二, 重放库, "replay-run", "worker", 重放栅栏, "model");
+    重放代理二 = 添加受控工具(重放代理二,
+        新受控("journal_controlled", 受控日志计数, 重放策略));
+    断言(字符串::等于(运行(重放代理二, "duplicate dispatch"), "controlled-journal-success-aligned")
+        && 日志处理次数 == 1, "duplicate_dispatch_replays_without_second_handler_call");
+    关闭代理(重放代理二);
+    关闭运行日志(重放库);
+    IO.删除文件(重放路径);
+
+    // The attached context has a stale fence. Record creation must fail before the handler
+    // is entered, and the model receives the explicit non-dispatch result.
+    变量 拒绝路径: 字符串 = "/tmp/qi_harness_controlled_rejected_journal.db";
+    如果 (IO.文件存在(拒绝路径) == 1) { IO.删除文件(拒绝路径); }
+    变量 拒绝库: 整数 = 打开运行日志(拒绝路径);
+    创建代理运行(拒绝库, "rejected-run", "tenant", "session", "request-rejected",
+        "request-hash", "model", 时间.现在毫秒());
+    变量 有效栅栏: 整数 = 获取运行租约(拒绝库, "rejected-run", "worker",
+        时间.现在毫秒(), 时间.现在毫秒() + 5000);
+    数据库.执行(拒绝库, "CREATE TRIGGER reject_controlled_dispatch BEFORE INSERT ON tool_executions "
+        + "WHEN NEW.run_id = 'rejected-run' BEGIN SELECT RAISE(ABORT, 'injected dispatch failure'); END");
+    日志处理次数 = 0;
+    变量 拒绝代理: 代理 = 新代理("/v1/controlled-journal-rejected", "controlled-rejected");
+    拒绝代理 = 附加运行日志上下文(拒绝代理, 拒绝库, "rejected-run", "worker", 有效栅栏, "model");
+    拒绝代理 = 添加受控工具(拒绝代理,
+        新受控("journal_controlled", 受控日志计数, 默认工具执行策略()));
+    断言(字符串::等于(运行(拒绝代理, "stale dispatch"), "controlled-journal-rejected-aligned")
+        && 日志处理次数 == 0, "record_create_failure_means_handler_count_zero");
+    关闭代理(拒绝代理);
+    关闭运行日志(拒绝库);
+    IO.删除文件(拒绝路径);
+    清空生命周期订阅者();
+}

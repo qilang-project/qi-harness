@@ -12,3 +12,7 @@ examples/seo审计/seo命令行
 # 运行产物
 *.db
 examples/qi_packages/
+
+# Python tooling caches
+__pycache__/
+*.pyc

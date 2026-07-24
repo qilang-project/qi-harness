@@ -1,0 +1,676 @@
+// 运行日志 — Phase B SQLite run journal, leases, attempts, tools, and budgets.
+
+包 Harness;
+
+导入 标准库.数据库;
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+
+// Result conventions: mutations return 1 for a new change, 2 for an identical
+// idempotent replay, 0 for a conflict/stale lease, and -1 for invalid input or DB error.
+
+函数 日志SQL文本(原文: 字符串) : 字符串 {
+    返回 "'" + 字符串::替换(原文, "'", "''") + "'";
+}
+
+函数 日志首行(行JSON: 字符串) : 整数 {
+    变量 数组值: 整数 = J.解码(行JSON);
+    如果 (数组值 <= 0 || J.数组长度(数组值) == 0) { 返回 0; }
+    返回 J.数组获取对象(数组值, 0);
+}
+
+函数 日志是JSON(文本: 字符串) : 整数 {
+    变量 值: 整数 = J.解码(文本);
+    如果 (值 <= 0) { 返回 0; }
+    J.删除(值);
+    返回 1;
+}
+
+函数 日志非空(文本: 字符串) : 整数 {
+    如果 (字符串::字节长度(文本) > 0) { 返回 1; }
+    返回 0;
+}
+
+函数 日志回滚(库: 整数) : 整数 {
+    数据库.执行(库, "ROLLBACK");
+    返回 0 - 1;
+}
+
+函数 日志提交(库: 整数) : 整数 {
+    如果 (数据库.执行(库, "COMMIT") < 0) { 返回 日志回滚(库); }
+    返回 1;
+}
+
+函数 日志运行存在(库: 整数, 运行ID: 字符串) : 整数 {
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT COUNT(*) AS count FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    如果 (行 > 0 && J.获取整数(行, "count") == 1) { 返回 1; }
+    返回 0;
+}
+
+函数 日志工具列存在(库: 整数, 列名: 字符串) : 整数 {
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT COUNT(*) AS count FROM pragma_table_info('tool_executions') WHERE name = "
+        + 日志SQL文本(列名)));
+    如果 (行 > 0 && J.获取整数(行, "count") == 1) { 返回 1; }
+    返回 0;
+}
+
+函数 日志租约匹配SQL(运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数) : 字符串 {
+    返回 "run_id = " + 日志SQL文本(运行ID)
+        + " AND lease_owner = " + 日志SQL文本(所有者)
+        + " AND lease_fence = " + 整数转字符串(栅栏)
+        + " AND lease_expires_at > " + 整数转字符串(当前时间)
+        + " AND current_state = " + 日志SQL文本(期望状态);
+}
+
+// Opens a standalone journal DB or adds the companion tables to an existing SQLite DB.
+公开 函数 打开运行日志(路径: 字符串) : 整数 {
+    变量 库: 整数 = 数据库.连接(路径);
+    如果 (库 <= 0) { 返回 0; }
+    如果 (数据库.执行(库, "PRAGMA foreign_keys = ON") < 0
+        || 数据库.执行(库, "CREATE TABLE IF NOT EXISTS agent_runs ("
+            + "run_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, session_id TEXT NOT NULL, "
+            + "request_id TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL, "
+            + "current_state TEXT NOT NULL, lease_owner TEXT, lease_expires_at INTEGER, "
+            + "lease_fence INTEGER NOT NULL DEFAULT 0, last_seq INTEGER NOT NULL DEFAULT 0, "
+            + "partial_output_committed INTEGER NOT NULL DEFAULT 0, final_text TEXT, "
+            + "usage_json TEXT, error_json TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, "
+            + "UNIQUE (tenant_id, session_id, request_id))") < 0
+        || 数据库.执行(库, "CREATE TABLE IF NOT EXISTS agent_run_events ("
+            + "run_id TEXT NOT NULL, seq INTEGER NOT NULL, type TEXT NOT NULL, timestamp INTEGER NOT NULL, "
+            + "payload_json TEXT NOT NULL, PRIMARY KEY (run_id, seq), "
+            + "FOREIGN KEY (run_id) REFERENCES agent_runs(run_id))") < 0
+        || 数据库.执行(库, "CREATE TABLE IF NOT EXISTS model_attempts ("
+            + "attempt_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, step_id TEXT NOT NULL, "
+            + "attempt_number INTEGER NOT NULL, status TEXT NOT NULL, provider_request_id TEXT, "
+            + "first_output_at INTEGER, usage_json TEXT, usage_status TEXT NOT NULL, error_json TEXT, "
+            + "UNIQUE (run_id, step_id, attempt_number), "
+            + "FOREIGN KEY (run_id) REFERENCES agent_runs(run_id))") < 0
+        || 数据库.执行(库, "CREATE TABLE IF NOT EXISTS tool_executions ("
+            + "execution_key TEXT PRIMARY KEY, run_id TEXT NOT NULL, step_id TEXT NOT NULL, "
+            + "tool_call_id TEXT NOT NULL, tool_name TEXT NOT NULL, arguments_hash TEXT NOT NULL, "
+            + "idempotency_key TEXT, status TEXT NOT NULL, dispatch_started_at INTEGER, "
+            + "external_commit_state TEXT NOT NULL, reconciliation_status TEXT NOT NULL, "
+            + "result_json TEXT, error_json TEXT, started_at INTEGER, completed_at INTEGER, "
+            + "FOREIGN KEY (run_id) REFERENCES agent_runs(run_id))") < 0
+        || 数据库.执行(库, "CREATE TABLE IF NOT EXISTS budget_reservations ("
+            + "reservation_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, attempt_id TEXT NOT NULL, "
+            + "tenant_id TEXT NOT NULL, reserved_tokens INTEGER NOT NULL, "
+            + "reserved_cost_micros INTEGER NOT NULL DEFAULT 0, actual_tokens INTEGER, "
+            + "actual_cost_micros INTEGER, status TEXT NOT NULL, usage_status TEXT NOT NULL, "
+            + "created_at INTEGER NOT NULL, settled_at INTEGER, UNIQUE (attempt_id), "
+            + "FOREIGN KEY (run_id) REFERENCES agent_runs(run_id), "
+            + "FOREIGN KEY (attempt_id) REFERENCES model_attempts(attempt_id))") < 0
+        || 数据库.执行(库, "CREATE INDEX IF NOT EXISTS agent_run_events_replay ON agent_run_events(run_id, seq)") < 0
+        || 数据库.执行(库, "CREATE INDEX IF NOT EXISTS model_attempts_run ON model_attempts(run_id, step_id)") < 0
+        || 数据库.执行(库, "CREATE INDEX IF NOT EXISTS tool_executions_run ON tool_executions(run_id, step_id)") < 0
+        || 数据库.执行(库, "CREATE INDEX IF NOT EXISTS budget_reservations_run ON budget_reservations(run_id)") < 0) {
+        数据库.关闭(库);
+        返回 0;
+    }
+    如果 (日志工具列存在(库, "dispatch_lease_fence") == 0
+        && 数据库.执行(库, "ALTER TABLE tool_executions ADD COLUMN dispatch_lease_fence INTEGER") < 0) {
+        数据库.关闭(库);
+        返回 0;
+    }
+    如果 (日志工具列存在(库, "completion_lease_fence") == 0
+        && 数据库.执行(库, "ALTER TABLE tool_executions ADD COLUMN completion_lease_fence INTEGER") < 0) {
+        数据库.关闭(库);
+        返回 0;
+    }
+    变量 模式: 整数 = 日志首行(数据库.查询(库,
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN "
+        + "('agent_runs','agent_run_events','model_attempts','tool_executions','budget_reservations')"));
+    如果 (模式 <= 0 || J.获取整数(模式, "count") != 5) {
+        数据库.关闭(库);
+        返回 0;
+    }
+    返回 库;
+}
+
+公开 函数 打开内存运行日志() : 整数 { 返回 打开运行日志(":memory:"); }
+
+公开 函数 关闭运行日志(库: 整数) : 整数 {
+    如果 (库 <= 0) { 返回 0; }
+    数据库.关闭(库);
+    返回 1;
+}
+
+// The scoped request key is idempotent only when request_hash is identical.
+公开 函数 创建代理运行(库: 整数, 运行ID: 字符串, 租户ID: 字符串, 会话ID: 字符串,
+                    请求ID: 字符串, 请求哈希: 字符串, 初始状态: 字符串, 创建时间: 整数) : 整数 {
+    如果 (库 <= 0 || 日志非空(运行ID) == 0 || 日志非空(租户ID) == 0
+        || 日志非空(会话ID) == 0 || 日志非空(请求ID) == 0
+        || 日志非空(请求哈希) == 0 || 日志非空(初始状态) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT run_id, request_hash FROM agent_runs WHERE tenant_id = " + 日志SQL文本(租户ID)
+        + " AND session_id = " + 日志SQL文本(会话ID) + " AND request_id = " + 日志SQL文本(请求ID)));
+    如果 (已有 > 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "run_id"), 运行ID) == 1
+            && 字符串::等于(J.获取字符串(已有, "request_hash"), 请求哈希) == 1) { 返回 2; }
+        返回 0;
+    }
+    如果 (日志运行存在(库, 运行ID) == 1) {
+        数据库.执行(库, "ROLLBACK");
+        返回 0;
+    }
+    变量 写入: 整数 = 数据库.执行(库,
+        "INSERT INTO agent_runs (run_id, tenant_id, session_id, request_id, request_hash, status, "
+        + "current_state, created_at, updated_at) VALUES (" + 日志SQL文本(运行ID) + ", "
+        + 日志SQL文本(租户ID) + ", " + 日志SQL文本(会话ID) + ", " + 日志SQL文本(请求ID) + ", "
+        + 日志SQL文本(请求哈希) + ", 'running', " + 日志SQL文本(初始状态) + ", "
+        + 整数转字符串(创建时间) + ", " + 整数转字符串(创建时间) + ")");
+    如果 (写入 <= 0 || 日志提交(库) < 0) { 返回 0 - 1; }
+    返回 1;
+}
+
+// Returns the newly incremented fence, 0 when another unexpired owner holds it, -1 on error.
+公开 函数 获取运行租约(库: 整数, 运行ID: 字符串, 所有者: 字符串,
+                    当前时间: 整数, 到期时间: 整数) : 整数 {
+    如果 (库 <= 0 || 日志非空(所有者) == 0 || 到期时间 <= 当前时间) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 更新: 整数 = 数据库.执行(库, "UPDATE agent_runs SET lease_owner = " + 日志SQL文本(所有者)
+        + ", lease_expires_at = " + 整数转字符串(到期时间)
+        + ", lease_fence = lease_fence + 1, updated_at = " + 整数转字符串(当前时间)
+        + " WHERE run_id = " + 日志SQL文本(运行ID)
+        + " AND (lease_owner IS NULL OR lease_expires_at <= " + 整数转字符串(当前时间)
+        + " OR lease_owner = " + 日志SQL文本(所有者) + ")");
+    如果 (更新 < 0) { 返回 日志回滚(库); }
+    如果 (更新 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 行: 整数 = 日志首行(数据库.查询(库, "SELECT lease_fence FROM agent_runs WHERE run_id = "
+        + 日志SQL文本(运行ID) + " AND lease_owner = " + 日志SQL文本(所有者)));
+    如果 (行 <= 0) { 返回 日志回滚(库); }
+    变量 栅栏: 整数 = J.获取整数(行, "lease_fence");
+    如果 (日志提交(库) < 0) { 返回 0 - 1; }
+    返回 栅栏;
+}
+
+公开 函数 续期运行租约(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    当前时间: 整数, 到期时间: 整数) : 整数 {
+    如果 (库 <= 0 || 到期时间 <= 当前时间) { 返回 0 - 1; }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE agent_runs SET lease_expires_at = "
+        + 整数转字符串(到期时间) + ", updated_at = " + 整数转字符串(当前时间)
+        + " WHERE run_id = " + 日志SQL文本(运行ID) + " AND lease_owner = " + 日志SQL文本(所有者)
+        + " AND lease_fence = " + 整数转字符串(栅栏)
+        + " AND lease_expires_at > " + 整数转字符串(当前时间));
+    如果 (影响 < 0) { 返回 0 - 1; }
+    如果 (影响 == 0) { 返回 0; }
+    返回 1;
+}
+
+公开 函数 释放运行租约(库: 整数, 运行ID: 字符串, 所有者: 字符串,
+                    栅栏: 整数, 当前时间: 整数) : 整数 {
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE agent_runs SET lease_owner = NULL, lease_expires_at = NULL, "
+        + "updated_at = " + 整数转字符串(当前时间) + " WHERE run_id = " + 日志SQL文本(运行ID)
+        + " AND lease_owner = " + 日志SQL文本(所有者) + " AND lease_fence = " + 整数转字符串(栅栏));
+    如果 (影响 < 0) { 返回 0 - 1; }
+    如果 (影响 == 0) { 返回 0; }
+    返回 1;
+}
+
+// State update, sequence allocation, and event insertion are one transaction.
+公开 函数 追加运行事件(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 新状态: 字符串, 新运行状态: 字符串,
+                    事件类型: 字符串, 时间戳: 整数, 载荷JSON: 字符串) : 整数 {
+    如果 (库 <= 0 || 日志非空(事件类型) == 0 || 日志非空(新状态) == 0
+        || 日志非空(新运行状态) == 0 || 日志是JSON(载荷JSON) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 更新: 整数 = 数据库.执行(库, "UPDATE agent_runs SET last_seq = last_seq + 1, current_state = "
+        + 日志SQL文本(新状态) + ", status = " + 日志SQL文本(新运行状态)
+        + ", updated_at = " + 整数转字符串(时间戳) + " WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 时间戳));
+    如果 (更新 < 0) { 返回 日志回滚(库); }
+    如果 (更新 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT last_seq FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    如果 (行 <= 0) { 返回 日志回滚(库); }
+    变量 序号: 整数 = J.获取整数(行, "last_seq");
+    如果 (数据库.执行(库, "INSERT INTO agent_run_events (run_id, seq, type, timestamp, payload_json) VALUES ("
+        + 日志SQL文本(运行ID) + ", " + 整数转字符串(序号) + ", " + 日志SQL文本(事件类型) + ", "
+        + 整数转字符串(时间戳) + ", " + 日志SQL文本(载荷JSON) + ")") <= 0) {
+        返回 日志回滚(库);
+    }
+    如果 (日志提交(库) < 0) { 返回 0 - 1; }
+    返回 序号;
+}
+
+公开 函数 列出运行事件(库: 整数, 运行ID: 字符串, 之后序号: 整数) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT run_id, seq, type, timestamp, payload_json FROM agent_run_events WHERE run_id = "
+        + 日志SQL文本(运行ID) + " AND seq > " + 整数转字符串(之后序号) + " ORDER BY seq");
+}
+
+// Reliable-stream coordinator lookup by the tenant-scoped idempotency key.
+公开 函数 获取请求代理运行JSON(库: 整数, 租户ID: 字符串, 会话ID: 字符串,
+                    请求ID: 字符串) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT run_id, tenant_id, session_id, request_id, request_hash, status, current_state, "
+        + "COALESCE(lease_owner, '') AS lease_owner, COALESCE(lease_expires_at, 0) AS lease_expires_at, "
+        + "lease_fence, last_seq, partial_output_committed, COALESCE(final_text, '') AS final_text, "
+        + "COALESCE(usage_json, '') AS usage_json, COALESCE(error_json, '') AS error_json, created_at, updated_at "
+        + "FROM agent_runs WHERE tenant_id = " + 日志SQL文本(租户ID)
+        + " AND session_id = " + 日志SQL文本(会话ID)
+        + " AND request_id = " + 日志SQL文本(请求ID));
+}
+
+// Persists an externally deliverable event and its commitment boundary in one transaction.
+公开 函数 追加流运行事件(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 新状态: 字符串, 事件类型: 字符串,
+                    时间戳: 整数, 载荷JSON: 字符串, 已提交输出: 整数) : 整数 {
+    如果 (库 <= 0 || 日志非空(事件类型) == 0 || 日志非空(新状态) == 0
+        || 日志是JSON(载荷JSON) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 更新: 整数 = 数据库.执行(库, "UPDATE agent_runs SET last_seq = last_seq + 1, current_state = "
+        + 日志SQL文本(新状态) + ", partial_output_committed = CASE WHEN "
+        + 整数转字符串(已提交输出) + " = 1 THEN 1 ELSE partial_output_committed END, updated_at = "
+        + 整数转字符串(时间戳) + " WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 时间戳)
+        + " AND status = 'running'");
+    如果 (更新 < 0) { 返回 日志回滚(库); }
+    如果 (更新 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT last_seq FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    如果 (行 <= 0) { 返回 日志回滚(库); }
+    变量 序号: 整数 = J.获取整数(行, "last_seq");
+    如果 (数据库.执行(库, "INSERT INTO agent_run_events (run_id, seq, type, timestamp, payload_json) VALUES ("
+        + 日志SQL文本(运行ID) + ", " + 整数转字符串(序号) + ", " + 日志SQL文本(事件类型) + ", "
+        + 整数转字符串(时间戳) + ", " + 日志SQL文本(载荷JSON) + ")") <= 0) {
+        返回 日志回滚(库);
+    }
+    如果 (日志提交(库) < 0) { 返回 0 - 1; }
+    返回 序号;
+}
+
+// Exactly one terminal event updates the replay result and run status atomically.
+公开 函数 终结流运行(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 终态: 字符串, 运行状态: 字符串,
+                    事件类型: 字符串, 时间戳: 整数, 载荷JSON: 字符串,
+                    已提交输出: 整数, 最终文本: 字符串, 使用JSON: 字符串,
+                    错误JSON: 字符串) : 整数 {
+    如果 (库 <= 0 || 日志非空(终态) == 0 || 日志非空(运行状态) == 0
+        || 日志非空(事件类型) == 0 || 日志是JSON(载荷JSON) == 0
+        || (日志非空(使用JSON) == 1 && 日志是JSON(使用JSON) == 0)
+        || (日志非空(错误JSON) == 1 && 日志是JSON(错误JSON) == 0)) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 更新: 整数 = 数据库.执行(库, "UPDATE agent_runs SET last_seq = last_seq + 1, current_state = "
+        + 日志SQL文本(终态) + ", status = " + 日志SQL文本(运行状态)
+        + ", partial_output_committed = CASE WHEN " + 整数转字符串(已提交输出)
+        + " = 1 THEN 1 ELSE partial_output_committed END, final_text = " + 日志SQL文本(最终文本)
+        + ", usage_json = " + 日志SQL文本(使用JSON) + ", error_json = " + 日志SQL文本(错误JSON)
+        + ", updated_at = " + 整数转字符串(时间戳) + " WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 时间戳)
+        + " AND status = 'running'");
+    如果 (更新 < 0) { 返回 日志回滚(库); }
+    如果 (更新 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT last_seq FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    如果 (行 <= 0) { 返回 日志回滚(库); }
+    变量 序号: 整数 = J.获取整数(行, "last_seq");
+    如果 (数据库.执行(库, "INSERT INTO agent_run_events (run_id, seq, type, timestamp, payload_json) VALUES ("
+        + 日志SQL文本(运行ID) + ", " + 整数转字符串(序号) + ", " + 日志SQL文本(事件类型) + ", "
+        + 整数转字符串(时间戳) + ", " + 日志SQL文本(载荷JSON) + ")") <= 0) {
+        返回 日志回滚(库);
+    }
+    如果 (日志提交(库) < 0) { 返回 0 - 1; }
+    返回 序号;
+}
+
+公开 函数 创建模型尝试(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 尝试ID: 字符串, 步骤ID: 字符串,
+                    尝试号: 整数, 状态: 字符串, 使用状态: 字符串) : 整数 {
+    如果 (库 <= 0 || 日志非空(尝试ID) == 0 || 尝试号 <= 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 租约: 整数 = 日志首行(数据库.查询(库, "SELECT COUNT(*) AS count FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)));
+    如果 (租约 <= 0 || J.获取整数(租约, "count") == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT attempt_id, status, usage_status FROM model_attempts WHERE run_id = " + 日志SQL文本(运行ID)
+        + " AND step_id = " + 日志SQL文本(步骤ID) + " AND attempt_number = " + 整数转字符串(尝试号)));
+    如果 (已有 > 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "attempt_id"), 尝试ID) == 1
+            && 字符串::等于(J.获取字符串(已有, "status"), 状态) == 1
+            && 字符串::等于(J.获取字符串(已有, "usage_status"), 使用状态) == 1) { 返回 2; }
+        返回 0;
+    }
+    如果 (数据库.执行(库, "INSERT INTO model_attempts (attempt_id, run_id, step_id, attempt_number, status, usage_status) VALUES ("
+        + 日志SQL文本(尝试ID) + ", " + 日志SQL文本(运行ID) + ", " + 日志SQL文本(步骤ID) + ", "
+        + 整数转字符串(尝试号) + ", " + 日志SQL文本(状态) + ", " + 日志SQL文本(使用状态) + ")") <= 0) {
+        返回 日志回滚(库);
+    }
+    返回 日志提交(库);
+}
+
+公开 函数 更新模型尝试(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 尝试ID: 字符串, 状态: 字符串,
+                    提供方请求ID: 字符串, 首次输出时间: 整数, 使用JSON: 字符串,
+                    使用状态: 字符串, 错误JSON: 字符串) : 整数 {
+    如果 (日志非空(使用JSON) == 1 && 日志是JSON(使用JSON) == 0) { 返回 0 - 1; }
+    如果 (日志非空(错误JSON) == 1 && 日志是JSON(错误JSON) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE model_attempts SET status = " + 日志SQL文本(状态)
+        + ", provider_request_id = " + 日志SQL文本(提供方请求ID)
+        + ", first_output_at = " + 整数转字符串(首次输出时间)
+        + ", usage_json = " + 日志SQL文本(使用JSON) + ", usage_status = " + 日志SQL文本(使用状态)
+        + ", error_json = " + 日志SQL文本(错误JSON) + " WHERE attempt_id = " + 日志SQL文本(尝试ID)
+        + " AND run_id = " + 日志SQL文本(运行ID) + " AND EXISTS (SELECT 1 FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间) + ")");
+    如果 (影响 < 0) { 返回 日志回滚(库); }
+    如果 (影响 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    返回 日志提交(库);
+}
+
+公开 函数 创建工具执行(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 执行键: 字符串, 步骤ID: 字符串,
+                    工具调用ID: 字符串, 工具名: 字符串, 参数哈希: 字符串,
+                    幂等键: 字符串, 状态: 字符串) : 整数 {
+    如果 (库 <= 0 || 日志非空(执行键) == 0 || 日志非空(工具名) == 0 || 日志非空(参数哈希) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 租约: 整数 = 日志首行(数据库.查询(库, "SELECT COUNT(*) AS count FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)));
+    如果 (租约 <= 0 || J.获取整数(租约, "count") == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 查重条件: 字符串 = "execution_key = " + 日志SQL文本(执行键);
+    如果 (日志非空(幂等键) == 1) {
+        查重条件 = 查重条件 + " OR (run_id = " + 日志SQL文本(运行ID)
+            + " AND tool_name = " + 日志SQL文本(工具名)
+            + " AND idempotency_key = " + 日志SQL文本(幂等键) + ")";
+    }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT execution_key, run_id, tool_name, arguments_hash, COALESCE(idempotency_key, '') AS idempotency_key "
+        + "FROM tool_executions WHERE " + 查重条件 + " ORDER BY CASE WHEN execution_key = "
+        + 日志SQL文本(执行键) + " THEN 0 ELSE 1 END LIMIT 1"));
+    如果 (已有 > 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "execution_key"), 执行键) == 1
+            && 字符串::等于(J.获取字符串(已有, "run_id"), 运行ID) == 1
+            && 字符串::等于(J.获取字符串(已有, "tool_name"), 工具名) == 1
+            && 字符串::等于(J.获取字符串(已有, "arguments_hash"), 参数哈希) == 1
+            && 字符串::等于(J.获取字符串(已有, "idempotency_key"), 幂等键) == 1) { 返回 2; }
+        如果 (日志非空(幂等键) == 1
+            && 字符串::等于(J.获取字符串(已有, "run_id"), 运行ID) == 1
+            && 字符串::等于(J.获取字符串(已有, "tool_name"), 工具名) == 1
+            && 字符串::等于(J.获取字符串(已有, "arguments_hash"), 参数哈希) == 1
+            && 字符串::等于(J.获取字符串(已有, "idempotency_key"), 幂等键) == 1) { 返回 2; }
+        返回 0;
+    }
+    变量 幂等SQL: 字符串 = "NULL";
+    如果 (日志非空(幂等键) == 1) { 幂等SQL = 日志SQL文本(幂等键); }
+    如果 (数据库.执行(库, "INSERT INTO tool_executions (execution_key, run_id, step_id, tool_call_id, tool_name, "
+        + "arguments_hash, idempotency_key, status, dispatch_started_at, dispatch_lease_fence, "
+        + "external_commit_state, reconciliation_status) VALUES ("
+        + 日志SQL文本(执行键) + ", " + 日志SQL文本(运行ID) + ", " + 日志SQL文本(步骤ID) + ", "
+        + 日志SQL文本(工具调用ID) + ", " + 日志SQL文本(工具名) + ", " + 日志SQL文本(参数哈希) + ", "
+        + 幂等SQL + ", " + 日志SQL文本(状态) + ", " + 整数转字符串(当前时间)
+        + ", " + 整数转字符串(栅栏)
+        + ", 'unknown', 'not_required')") <= 0) {
+        返回 日志回滚(库);
+    }
+    返回 日志提交(库);
+}
+
+公开 函数 更新工具执行(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 执行键: 字符串, 状态: 字符串,
+                    派发开始时间: 整数, 外部提交状态: 字符串, 对账状态: 字符串,
+                    结果JSON: 字符串, 错误JSON: 字符串, 开始时间: 整数, 完成时间: 整数) : 整数 {
+    如果 (日志非空(结果JSON) == 1 && 日志是JSON(结果JSON) == 0) { 返回 0 - 1; }
+    如果 (日志非空(错误JSON) == 1 && 日志是JSON(错误JSON) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE tool_executions SET status = " + 日志SQL文本(状态)
+        + ", dispatch_started_at = COALESCE(dispatch_started_at, " + 整数转字符串(派发开始时间) + ")"
+        + ", external_commit_state = " + 日志SQL文本(外部提交状态)
+        + ", reconciliation_status = " + 日志SQL文本(对账状态)
+        + ", result_json = " + 日志SQL文本(结果JSON) + ", error_json = " + 日志SQL文本(错误JSON)
+        + ", started_at = " + 整数转字符串(开始时间) + ", completed_at = " + 整数转字符串(完成时间)
+        + ", completion_lease_fence = " + 整数转字符串(栅栏)
+        + " WHERE execution_key = " + 日志SQL文本(执行键) + " AND run_id = " + 日志SQL文本(运行ID)
+        + " AND status = 'dispatching'"
+        + " AND EXISTS (SELECT 1 FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间) + ")");
+    如果 (影响 < 0) { 返回 日志回滚(库); }
+    如果 (影响 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    返回 日志提交(库);
+}
+
+// Resolves a duplicate dispatch without invoking the tool again. Completed rows replay
+// their durable result. An in-flight idempotent row remains owned by the first dispatch;
+// a no-key non-idempotent row is made explicitly ambiguous because the crash boundary
+// cannot prove whether the external side effect happened.
+公开 函数 处置重复工具执行JSON(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 执行键: 字符串, 工具名: 字符串,
+                    参数哈希: 字符串, 幂等键: 字符串) : 字符串 {
+    变量 拒绝: 字符串 = "{\"disposition\":\"rejected\"}";
+    如果 (库 <= 0 || 日志非空(执行键) == 0) { 返回 拒绝; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 拒绝; }
+    变量 租约: 整数 = 日志首行(数据库.查询(库, "SELECT COUNT(*) AS count FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)));
+    如果 (租约 <= 0 || J.获取整数(租约, "count") == 0) {
+        数据库.执行(库, "ROLLBACK");
+        返回 拒绝;
+    }
+    变量 条件: 字符串 = "execution_key = " + 日志SQL文本(执行键);
+    如果 (日志非空(幂等键) == 1) {
+        条件 = 条件 + " OR (run_id = " + 日志SQL文本(运行ID)
+            + " AND tool_name = " + 日志SQL文本(工具名)
+            + " AND idempotency_key = " + 日志SQL文本(幂等键) + ")";
+    }
+    变量 行: 整数 = 日志首行(数据库.查询(库,
+        "SELECT execution_key, run_id, tool_name, arguments_hash, COALESCE(idempotency_key, '') AS idempotency_key, "
+        + "status, reconciliation_status, COALESCE(result_json, '') AS result_json, COALESCE(error_json, '') AS error_json "
+        + "FROM tool_executions WHERE " + 条件 + " ORDER BY CASE WHEN execution_key = "
+        + 日志SQL文本(执行键) + " THEN 0 ELSE 1 END LIMIT 1"));
+    如果 (行 <= 0) {
+        数据库.执行(库, "ROLLBACK");
+        返回 拒绝;
+    }
+    如果 (字符串::等于(J.获取字符串(行, "run_id"), 运行ID) == 0
+        || 字符串::等于(J.获取字符串(行, "tool_name"), 工具名) == 0
+        || 字符串::等于(J.获取字符串(行, "arguments_hash"), 参数哈希) == 0
+        || 字符串::等于(J.获取字符串(行, "idempotency_key"), 幂等键) == 0) {
+        数据库.执行(库, "ROLLBACK");
+        返回 "{\"disposition\":\"needs_reconciliation\"}";
+    }
+    变量 结果JSON: 字符串 = J.获取字符串(行, "result_json");
+    如果 (日志非空(结果JSON) == 1) {
+        数据库.执行(库, "ROLLBACK");
+        变量 回放: 整数 = J.创建对象();
+        J.设置字符串(回放, "disposition", "replay");
+        J.设置字符串(回放, "execution_key", J.获取字符串(行, "execution_key"));
+        J.设置字符串(回放, "status", J.获取字符串(行, "status"));
+        J.设置字符串(回放, "result_json", 结果JSON);
+        变量 回放文本: 字符串 = J.转字符串(回放);
+        J.删除(回放);
+        返回 回放文本;
+    }
+    如果 (日志非空(幂等键) == 1) {
+        数据库.执行(库, "ROLLBACK");
+        返回 "{\"disposition\":\"existing\"}";
+    }
+    变量 不确定错误: 字符串 = "{\"code\":\"duplicate_dispatch_unknown\"}";
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE tool_executions SET status = 'ambiguous', "
+        + "external_commit_state = 'unknown', reconciliation_status = 'required', error_json = "
+        + 日志SQL文本(不确定错误) + " WHERE execution_key = "
+        + 日志SQL文本(J.获取字符串(行, "execution_key")) + " AND run_id = " + 日志SQL文本(运行ID)
+        + " AND result_json IS NULL");
+    如果 (影响 < 0 || 日志提交(库) < 0) { 返回 拒绝; }
+    返回 "{\"disposition\":\"needs_reconciliation\"}";
+}
+
+// A non-idempotent dispatch with unknown external commit cannot be retried safely.
+公开 函数 标记工具执行不确定(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 执行键: 字符串, 错误JSON: 字符串) : 整数 {
+    如果 (日志非空(错误JSON) == 1 && 日志是JSON(错误JSON) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE tool_executions SET status = 'ambiguous', "
+        + "external_commit_state = 'unknown', reconciliation_status = 'required', error_json = "
+        + 日志SQL文本(错误JSON) + " WHERE execution_key = " + 日志SQL文本(执行键)
+        + " AND run_id = " + 日志SQL文本(运行ID) + " AND idempotency_key IS NULL"
+        + " AND status = 'dispatching'"
+        + " AND EXISTS (SELECT 1 FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间) + ")");
+    如果 (影响 < 0) { 返回 日志回滚(库); }
+    如果 (影响 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    返回 日志提交(库);
+}
+
+公开 函数 预留运行预算(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 预留ID: 字符串, 尝试ID: 字符串,
+                    租户ID: 字符串, 预留令牌: 整数, 预留成本微元: 整数,
+                    使用状态: 字符串) : 整数 {
+    如果 (库 <= 0 || 预留令牌 < 0 || 预留成本微元 < 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 更新: 整数 = 数据库.执行(库, "UPDATE agent_runs SET last_seq = last_seq + 1, updated_at = "
+        + 整数转字符串(当前时间) + " WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)
+        + " AND status = 'running' AND tenant_id = " + 日志SQL文本(租户ID));
+    如果 (更新 < 0) { 返回 日志回滚(库); }
+    如果 (更新 == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT reservation_id, reserved_tokens, reserved_cost_micros FROM budget_reservations WHERE attempt_id = "
+        + 日志SQL文本(尝试ID)));
+    如果 (已有 > 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "reservation_id"), 预留ID) == 1
+            && J.获取整数(已有, "reserved_tokens") == 预留令牌
+            && J.获取整数(已有, "reserved_cost_micros") == 预留成本微元) { 返回 2; }
+        返回 0;
+    }
+    如果 (数据库.执行(库, "INSERT INTO budget_reservations (reservation_id, run_id, attempt_id, tenant_id, "
+        + "reserved_tokens, reserved_cost_micros, status, usage_status, created_at) VALUES ("
+        + 日志SQL文本(预留ID) + ", " + 日志SQL文本(运行ID) + ", " + 日志SQL文本(尝试ID) + ", "
+        + 日志SQL文本(租户ID) + ", " + 整数转字符串(预留令牌) + ", "
+        + 整数转字符串(预留成本微元) + ", 'reserved', " + 日志SQL文本(使用状态) + ", "
+        + 整数转字符串(当前时间) + ")") <= 0) { 返回 日志回滚(库); }
+    变量 行: 整数 = 日志首行(数据库.查询(库, "SELECT last_seq FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    变量 序号: 整数 = J.获取整数(行, "last_seq");
+    如果 (行 <= 0 || 数据库.执行(库, "INSERT INTO agent_run_events (run_id, seq, type, timestamp, payload_json) VALUES ("
+        + 日志SQL文本(运行ID) + ", " + 整数转字符串(序号) + ", 'budget.reserved', "
+        + 整数转字符串(当前时间) + ", '{\"tokens\":" + 整数转字符串(预留令牌) + "}')") <= 0) {
+        返回 日志回滚(库);
+    }
+    返回 日志提交(库);
+}
+
+// Identical settlement is idempotent; a different second settlement conflicts.
+公开 函数 结算运行预算(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 预留ID: 字符串,
+                    实际令牌: 整数, 实际成本微元: 整数, 结算状态: 字符串,
+                    使用状态: 字符串) : 整数 {
+    如果 (实际令牌 < 0 || 实际成本微元 < 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 租约: 整数 = 日志首行(数据库.查询(库, "SELECT COUNT(*) AS count FROM agent_runs WHERE "
+        + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)));
+    如果 (租约 <= 0 || J.获取整数(租约, "count") == 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT status, usage_status, COALESCE(actual_tokens, -1) AS actual_tokens, "
+        + "COALESCE(actual_cost_micros, -1) AS actual_cost_micros FROM budget_reservations WHERE reservation_id = "
+        + 日志SQL文本(预留ID) + " AND run_id = " + 日志SQL文本(运行ID)));
+    如果 (已有 <= 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    如果 (字符串::等于(J.获取字符串(已有, "status"), "reserved") == 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "status"), 结算状态) == 1
+            && 字符串::等于(J.获取字符串(已有, "usage_status"), 使用状态) == 1
+            && J.获取整数(已有, "actual_tokens") == 实际令牌
+            && J.获取整数(已有, "actual_cost_micros") == 实际成本微元) { 返回 2; }
+        返回 0;
+    }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE budget_reservations SET actual_tokens = "
+        + 整数转字符串(实际令牌) + ", actual_cost_micros = " + 整数转字符串(实际成本微元)
+        + ", status = " + 日志SQL文本(结算状态) + ", usage_status = " + 日志SQL文本(使用状态)
+        + ", settled_at = " + 整数转字符串(当前时间) + " WHERE reservation_id = " + 日志SQL文本(预留ID)
+        + " AND status = 'reserved'");
+    如果 (影响 <= 0) { 返回 日志回滚(库); }
+    如果 (数据库.执行(库, "UPDATE agent_runs SET last_seq = last_seq + 1, updated_at = "
+        + 整数转字符串(当前时间) + " WHERE " + 日志租约匹配SQL(运行ID, 所有者, 栅栏, 期望状态, 当前时间)
+        + " AND status = 'running'") <= 0) { 返回 日志回滚(库); }
+    变量 行: 整数 = 日志首行(数据库.查询(库, "SELECT last_seq FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID)));
+    变量 序号: 整数 = J.获取整数(行, "last_seq");
+    变量 事件类型: 字符串 = "budget.released";
+    如果 (字符串::等于(使用状态, "actual") == 1) { 事件类型 = "budget.settled"; }
+    否则如果 (字符串::等于(使用状态, "usage_unknown") == 1) { 事件类型 = "budget.usage_unknown"; }
+    如果 (行 <= 0 || 数据库.执行(库, "INSERT INTO agent_run_events (run_id, seq, type, timestamp, payload_json) VALUES ("
+        + 日志SQL文本(运行ID) + ", " + 整数转字符串(序号) + ", " + 日志SQL文本(事件类型) + ", "
+        + 整数转字符串(当前时间) + ", '{\"tokens\":" + 整数转字符串(实际令牌) + "}')") <= 0) {
+        返回 日志回滚(库);
+    }
+    返回 日志提交(库);
+}
+
+// A stale writer cannot mutate the run, but it must not leave a provider reservation
+// outstanding. This monotonic fallback conservatively retains the full reservation.
+公开 函数 保守保留运行预算(库: 整数, 运行ID: 字符串, 预留ID: 字符串,
+                    当前时间: 整数) : 整数 {
+    如果 (库 <= 0 || 日志非空(运行ID) == 0 || 日志非空(预留ID) == 0) { 返回 0 - 1; }
+    如果 (数据库.执行(库, "BEGIN IMMEDIATE") < 0) { 返回 0 - 1; }
+    变量 已有: 整数 = 日志首行(数据库.查询(库,
+        "SELECT status, usage_status, reserved_tokens, COALESCE(actual_tokens, -1) AS actual_tokens "
+        + "FROM budget_reservations WHERE reservation_id = " + 日志SQL文本(预留ID)
+        + " AND run_id = " + 日志SQL文本(运行ID)));
+    如果 (已有 <= 0) { 数据库.执行(库, "ROLLBACK"); 返回 0; }
+    如果 (字符串::等于(J.获取字符串(已有, "status"), "reserved") == 0) {
+        数据库.执行(库, "ROLLBACK");
+        如果 (字符串::等于(J.获取字符串(已有, "status"), "retained") == 1
+            && 字符串::等于(J.获取字符串(已有, "usage_status"), "usage_unknown") == 1
+            && J.获取整数(已有, "actual_tokens") == J.获取整数(已有, "reserved_tokens")) { 返回 2; }
+        返回 0;
+    }
+    变量 影响: 整数 = 数据库.执行(库, "UPDATE budget_reservations SET actual_tokens = reserved_tokens, "
+        + "actual_cost_micros = reserved_cost_micros, status = 'retained', usage_status = 'usage_unknown', settled_at = "
+        + 整数转字符串(当前时间) + " WHERE reservation_id = " + 日志SQL文本(预留ID)
+        + " AND run_id = " + 日志SQL文本(运行ID) + " AND status = 'reserved'");
+    如果 (影响 <= 0) { 返回 日志回滚(库); }
+    返回 日志提交(库);
+}
+
+公开 函数 获取运行预算JSON(库: 整数, 运行ID: 字符串) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT reservation_id, run_id, attempt_id, tenant_id, reserved_tokens, "
+        + "reserved_cost_micros, COALESCE(actual_tokens, -1) AS actual_tokens, "
+        + "COALESCE(actual_cost_micros, -1) AS actual_cost_micros, status, usage_status, created_at, "
+        + "COALESCE(settled_at, 0) AS settled_at FROM budget_reservations WHERE run_id = "
+        + 日志SQL文本(运行ID) + " ORDER BY created_at, reservation_id");
+}
+
+// Recovery never calls a provider. The new owner must first acquire the expired
+// lease; this fenced transaction adds the sole terminal event or loses harmlessly.
+公开 函数 恢复终结运行(库: 整数, 运行ID: 字符串, 所有者: 字符串, 栅栏: 整数,
+                    期望状态: 字符串, 当前时间: 整数, 终态: 字符串,
+                    运行状态: 字符串, 事件类型: 字符串, 错误JSON: 字符串) : 整数 {
+    变量 行: 整数 = 日志首行(获取代理运行JSON(库, 运行ID));
+    如果 (行 <= 0 || 字符串::等于(J.获取字符串(行, "status"), "running") == 0) { 返回 2; }
+    返回 终结流运行(库, 运行ID, 所有者, 栅栏, 期望状态, 终态, 运行状态,
+        事件类型, 当前时间, 错误JSON, J.获取整数(行, "partial_output_committed"),
+        J.获取字符串(行, "final_text"), J.获取字符串(行, "usage_json"), 错误JSON);
+}
+
+公开 函数 获取代理运行JSON(库: 整数, 运行ID: 字符串) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT run_id, tenant_id, session_id, request_id, request_hash, status, current_state, "
+        + "COALESCE(lease_owner, '') AS lease_owner, COALESCE(lease_expires_at, 0) AS lease_expires_at, "
+        + "lease_fence, last_seq, partial_output_committed, COALESCE(final_text, '') AS final_text, "
+        + "COALESCE(usage_json, '') AS usage_json, COALESCE(error_json, '') AS error_json, created_at, updated_at "
+        + "FROM agent_runs WHERE run_id = " + 日志SQL文本(运行ID));
+}
+
+公开 函数 获取模型尝试JSON(库: 整数, 运行ID: 字符串) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT attempt_id, run_id, step_id, attempt_number, status, "
+        + "COALESCE(provider_request_id, '') AS provider_request_id, "
+        + "COALESCE(first_output_at, 0) AS first_output_at, COALESCE(usage_json, '') AS usage_json, "
+        + "usage_status, COALESCE(error_json, '') AS error_json FROM model_attempts WHERE run_id = "
+        + 日志SQL文本(运行ID) + " ORDER BY step_id, attempt_number");
+}
+
+公开 函数 获取工具执行JSON(库: 整数, 执行键: 字符串) : 字符串 {
+    如果 (库 <= 0) { 返回 "[]"; }
+    返回 数据库.查询(库, "SELECT execution_key, run_id, step_id, tool_call_id, tool_name, arguments_hash, "
+        + "COALESCE(idempotency_key, '') AS idempotency_key, status, COALESCE(dispatch_started_at, 0) AS dispatch_started_at, "
+        + "COALESCE(dispatch_lease_fence, 0) AS dispatch_lease_fence, "
+        + "external_commit_state, reconciliation_status, COALESCE(result_json, '') AS result_json, "
+        + "COALESCE(error_json, '') AS error_json, COALESCE(started_at, 0) AS started_at, "
+        + "COALESCE(completed_at, 0) AS completed_at, COALESCE(completion_lease_fence, 0) AS completion_lease_fence "
+        + "FROM tool_executions WHERE execution_key = " + 日志SQL文本(执行键));
+}

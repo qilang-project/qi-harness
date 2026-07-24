@@ -1,0 +1,70 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.操作系统 作为 系统;
+导入 标准库.字符串;
+导入 标准库.大模型 作为 底层模型;
+导入 标准库.JSON 作为 J;
+导入 Harness::{大模型, 开启会话, 创建代理, 添加工具, 运行, 关闭代理, 工具};
+导入 Harness.代理::{代理, 附加会话存储, 恢复持久会话};
+导入 Harness.会话存储::{打开会话存储, 关闭会话存储, 加载会话条目};
+
+函数 fixture_tool(参数: 字符串) : 字符串 { 返回 "fixture-result"; }
+
+函数 断言(条件: 整数, 名字: 字符串) : 整数 {
+    如果 (条件 == 1) { IO.打印行("PASS " + 名字); 返回 1; }
+    IO.打印行("FAIL " + 名字);
+    返回 0;
+}
+
+函数 类型数(条目: 整数, 类型值: 字符串) : 整数 {
+    变量 数: 整数 = 0;
+    变量 i: 整数 = 0;
+    当 (i < J.数组长度(条目)) {
+        如果 (字符串::等于(J.获取字符串(J.数组获取对象(条目, i), "type"), 类型值) == 1) {
+            数 = 数 + 1;
+        }
+        i = i + 1;
+    }
+    返回 数;
+}
+
+函数 入口() {
+    变量 路径: 字符串 = "/tmp/qi_harness_agent_recording_test.db";
+    如果 (IO.文件存在(路径) == 1) { IO.删除文件(路径); }
+    变量 通过: 整数 = 0;
+    变量 库: 整数 = 打开会话存储(路径);
+    变量 配置 = 大模型(系统.获取环境变量("QI_TEST_URL") + "/v1/tool", "fixture-key", "fixture-model");
+    变量 代理值: 代理 = 附加会话存储(创建代理("session-recording", 开启会话(配置)),
+        库, "agent-session");
+    代理值 = 添加工具(代理值, 新建 工具 {
+        名字: "fixture_tool", 描述: "deterministic fixture tool",
+        参数schema: "{\"type\":\"object\"}", 处理: fixture_tool,
+    });
+    变量 回复: 字符串 = 运行(代理值, "use the fixture tool");
+    通过 = 通过 + 断言(字符串::等于(回复, "tool-finished") == 1, "agent_result");
+
+    变量 条目: 整数 = J.解码(加载会话条目(库, "agent-session"));
+    通过 = 通过 + 断言(J.数组长度(条目) == 7, "append_only_entry_count");
+    通过 = 通过 + 断言(类型数(条目, "turn.start") == 1
+        && 类型数(条目, "turn.complete") == 1, "successful_turn_is_bracketed");
+    通过 = 通过 + 断言(类型数(条目, "message.user") == 1, "continuation_has_no_duplicate_user");
+    通过 = 通过 + 断言(类型数(条目, "message.assistant.raw") == 2, "raw_assistant_per_model_response");
+    通过 = 通过 + 断言(类型数(条目, "tool.result") == 1, "tool_result_recorded_once");
+    通过 = 通过 + 断言(类型数(条目, "message.assistant.final") == 1, "final_assistant_audit_recorded");
+    关闭代理(代理值);
+    关闭会话存储(库);
+
+    库 = 打开会话存储(路径);
+    变量 新会话: 整数 = 开启会话(配置);
+    变量 新代理: 代理 = 附加会话存储(创建代理("session-restore", 新会话), 库, "agent-session");
+    通过 = 通过 + 断言(恢复持久会话(新代理) == 4, "reopen_restores_runtime_messages_without_final_duplicate");
+    变量 历史: 字符串 = 底层模型.历史JSON(新会话);
+    通过 = 通过 + 断言(字符串::包含(历史, "fixture-result") == 1
+        && 字符串::包含(历史, "tool-finished") == 1, "restored_history_contains_tool_and_final_raw");
+    关闭代理(新代理);
+    关闭会话存储(库);
+    IO.删除文件(路径);
+    如果 (通过 == 9) { IO.打印行("PASS agent_recording_total_9"); }
+    否则 { IO.打印行("FAIL agent_recording_total=" + 整数转字符串(通过)); }
+}

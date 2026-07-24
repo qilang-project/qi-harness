@@ -1,0 +1,155 @@
+name: Release preflight
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QI_WEB_REF: 120576d4c53888535e1ef617510fc3d340d2e640
+  QI_SOURCE_REF: 05568a72a92698502fe006bd3223536e9cb04887
+  QI_RUNTIME_SOURCE_REF: ceada461d2aca568b2b3788f3b310fcc07748423
+  QI_GUI_SOURCE_REF: 825802276688a528fcad53f831a92f8e35f89963
+
+jobs:
+  preflight:
+    name: Release policy preflight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and verify release identity
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            test "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag
+            git verify-tag "$GITHUB_REF_NAME"
+            git fetch --no-tags origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+            python3 scripts/version.py check "$version"
+            python3 scripts/check-release-notes.py "$version"
+          else
+            version="$(python3 scripts/version.py current)"
+            python3 scripts/check-release-notes.py --unreleased
+          fi
+          test -f LICENSE
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve API compatibility baseline
+        id: api_baseline
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=
+          manifest=
+          baseline_version=
+          for tag in $(git tag --merged "$GITHUB_SHA^" --list 'v*.*.*' --sort=-version:refname); do
+            if [[ "$(git cat-file -t "refs/tags/$tag")" == tag ]] \
+                && git cat-file -e "$tag:public-api.txt" \
+                && git cat-file -e "$tag:qi.toml"; then
+              git verify-tag "$tag"
+              baseline="$(git rev-parse "$tag^{commit}")"
+              break
+            fi
+          done
+          if [[ -z "$baseline" ]]; then
+            if [[ "${{ steps.version.outputs.version }}" != "0.2.0" ]]; then
+              echo "no prior signed v*.*.* release with an API baseline is reachable from $GITHUB_SHA" >&2
+              exit 1
+            fi
+            baseline="11ad18011059726535163dfd3280996f03c095ca"
+            baseline_version="0.1.0"
+            manifest="${RUNNER_TEMP}/qi-harness-2026.05.30-1-public-api.txt"
+            python3 scripts/historical-api-baseline.py --output "$manifest"
+          fi
+          echo "ref=$baseline" >> "$GITHUB_OUTPUT"
+          echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
+          echo "version=$baseline_version" >> "$GITHUB_OUTPUT"
+
+      - name: Build pinned Qi source
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$("$GITHUB_WORKSPACE/scripts/install-qi-source.sh")"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Bootstrap Qi package siblings
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages="${RUNNER_TEMP}/qi_packages"
+          mkdir -p "$packages"
+          ln -s "$GITHUB_WORKSPACE" "$packages/Harness"
+          git clone --quiet https://github.com/qilang-project/qi-web.git "$packages/Web"
+          git -C "$packages/Web" checkout --quiet "$QI_WEB_REF"
+          echo "QI_PACKAGES_PATH=$packages" >> "$GITHUB_ENV"
+
+      - name: Run full release quality gate
+        env:
+          QI_DIFF_BASE: ${{ steps.api_baseline.outputs.ref }}
+          QI_API_BASELINE_FILE: ${{ steps.api_baseline.outputs.manifest }}
+          QI_API_BASELINE_VERSION: ${{ steps.api_baseline.outputs.version }}
+        working-directory: ${{ runner.temp }}
+        run: "$GITHUB_WORKSPACE/run-offline-tests.sh"
+
+      - name: Reject prohibited tracked release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(\.env($|\.)|\.playwright-mcp/|__pycache__/)|\.(db|ll|log|o|pyc|sqlite|sqlite3)$'; then
+            echo "prohibited tracked files found" >&2
+            exit 1
+          fi
+
+  package:
+    name: Build and verify source package
+    needs: preflight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Build pinned Qi source
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$("$GITHUB_WORKSPACE/scripts/install-qi-source.sh")"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Build deterministic archives
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ needs.preflight.outputs.source_date_epoch }}
+          OUTPUT_DIR: ${{ github.workspace }}/dist
+        working-directory: ${{ runner.temp }}
+        run: "$GITHUB_WORKSPACE/scripts/package.sh"
+
+      - name: Verify isolated path consumer
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ needs.preflight.outputs.source_date_epoch }}
+          DIST: ${{ github.workspace }}/dist
+        working-directory: ${{ runner.temp }}
+        run: "$GITHUB_WORKSPACE/scripts/test-package.sh"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qi-harness-v${{ needs.preflight.outputs.version }}-source
+          path: dist/
+          if-no-files-found: error

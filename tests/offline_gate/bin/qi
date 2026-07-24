@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "${QI_OFFLINE_GATE_QI_LOG:?}"

@@ -1,0 +1,102 @@
+包 主程序;
+
+导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
+导入 标准库.大模型 作为 底层模型;
+导入 Harness.工具::{
+    工具, 注册表, 创建注册表, 注册, 派发,
+    设置执行模式, 工具执行模式, 设置工具钩子
+};
+
+变量 处理次数: 整数 = 0;
+变量 前钩子次数: 整数 = 0;
+
+函数 回显(参数JSON: 字符串) : 字符串 {
+    处理次数 = 处理次数 + 1;
+    返回 "handler(" + 参数JSON + ")";
+}
+
+函数 框架失败(参数JSON: 字符串) : 字符串 {
+    返回 "[harness] deterministic failure";
+}
+
+函数 前置(工具名: 字符串, 参数JSON: 字符串) : 字符串 {
+    前钩子次数 = 前钩子次数 + 1;
+    返回 "{\"stage\":\"before\"}";
+}
+
+函数 后置(工具名: 字符串, 输出: 字符串) : 字符串 {
+    返回 输出 + "->after";
+}
+
+函数 断言相等(名字: 字符串, 实际: 字符串, 期望: 字符串) {
+    如果 (字符串::等于(实际, 期望) == 1) {
+        IO.打印行("PASS " + 名字);
+    } 否则 {
+        IO.打印行("FAIL " + 名字 + ": " + 实际);
+    }
+}
+
+函数 入口() {
+    变量 会话: 整数 = 底层模型.创建会话("http://127.0.0.1:43510/v1", "test", "test");
+    变量 表: 注册表 = 创建注册表();
+    表 = 注册(表, 会话, 新建 工具 {
+        名字: "echo",
+        描述: "echo",
+        参数schema: "{\"type\":\"object\"}",
+        处理: 回显,
+    });
+    表 = 注册(表, 会话, 新建 工具 {
+        名字: "typed",
+        描述: "typed",
+        参数schema: "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\"},\"ratio\":{\"type\":\"number\"},\"enabled\":{\"type\":\"boolean\"},\"mode\":{\"type\":\"string\",\"enum\":[\"fast\",\"safe\"]},\"config\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"}}},\"required\":[\"name\",\"count\"],\"additionalProperties\":false}",
+        处理: 回显,
+    });
+    表 = 注册(表, 会话, 新建 工具 {
+        名字: "fail",
+        描述: "fail",
+        参数schema: "{\"type\":\"object\"}",
+        处理: 框架失败,
+    });
+
+    断言相等("valid_dispatch", 派发(表, "echo", "{\"x\":1}"), "handler({\"x\":1})");
+    断言相等("unknown_tool", 派发(表, "missing", "{}"),
+        "{\"error\":\"unknown_tool\",\"message\":\"tool is not registered\",\"name\":\"missing\",\"ok\":false}");
+    断言相等("invalid_json", 派发(表, "echo", "not-json"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"arguments must be a JSON object\",\"name\":\"echo\",\"ok\":false}");
+    断言相等("json_array_rejected", 派发(表, "echo", "[]"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"arguments must be a JSON object\",\"name\":\"echo\",\"ok\":false}");
+    断言相等("handler_error", 派发(表, "fail", "{}"),
+        "{\"error\":\"handler_error\",\"message\":\"[harness] deterministic failure\",\"name\":\"fail\",\"ok\":false}");
+
+    变量 校验前处理次数: 整数 = 处理次数;
+    断言相等("missing_required", 派发(表, "typed", "{\"name\":\"n\"}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'count' is required\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("wrong_primitive_type", 派发(表, "typed", "{\"name\":\"n\",\"count\":1.5}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'count' must be integer\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("enum_rejected", 派发(表, "typed", "{\"name\":\"n\",\"count\":1,\"mode\":\"turbo\"}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'mode' must be one of the allowed enum values\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("nested_object", 派发(表, "typed", "{\"name\":\"n\",\"count\":1,\"config\":{}}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'config.label' is required\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("nested_array", 派发(表, "typed", "{\"name\":\"n\",\"count\":1,\"items\":[1,\"two\"]}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'items[1]' must be integer\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("additional_property", 派发(表, "typed", "{\"name\":\"n\",\"count\":1,\"extra\":true}"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"field 'extra' is not allowed\",\"name\":\"typed\",\"ok\":false}");
+    断言相等("valid_nested", 派发(表, "typed", "{\"name\":\"n\",\"count\":1,\"ratio\":1.5,\"enabled\":false,\"mode\":\"safe\",\"config\":{\"label\":\"x\"},\"items\":[1,2]}"),
+        "handler({\"name\":\"n\",\"count\":1,\"ratio\":1.5,\"enabled\":false,\"mode\":\"safe\",\"config\":{\"label\":\"x\"},\"items\":[1,2]})");
+    断言相等("invalid_handler_not_reached", 整数转字符串(处理次数 - 校验前处理次数), "1");
+
+    表 = 设置工具钩子(表, "echo", 前置, 后置);
+    变量 钩子前次数: 整数 = 前钩子次数;
+    断言相等("validation_before_hook", 派发(表, "echo", "[]"),
+        "{\"error\":\"invalid_arguments\",\"message\":\"arguments must be a JSON object\",\"name\":\"echo\",\"ok\":false}");
+    断言相等("invalid_before_hook_not_reached", 整数转字符串(前钩子次数 - 钩子前次数), "0");
+    断言相等("hook_order", 派发(表, "echo", "{\"x\":1}"),
+        "handler({\"stage\":\"before\"})->after");
+
+    断言相等("default_mode", 整数转字符串(工具执行模式(表, "echo")), "0");
+    表 = 设置执行模式(表, "echo", 1);
+    断言相等("serial_metadata", 整数转字符串(工具执行模式(表, "echo")), "1");
+    断言相等("metadata_preserves_hooks", 派发(表, "echo", "{}"),
+        "handler({\"stage\":\"before\"})->after");
+}
