@@ -1,6 +1,7 @@
 包 主程序;
 
 导入 标准库.输入输出 作为 IO;
+导入 标准库.字符串;
 导入 标准库.操作系统 作为 系统;
 导入 Harness::{大模型, 配置超时, 开启会话, 创建代理, 设置重试策略, 附加预算, 设置请求令牌预算, 取消请求令牌预算, 设置最大步数, 添加工具, 运行, 关闭代理, 工具};
 导入 Harness.代理::{代理};
@@ -31,6 +32,18 @@
     返回 代理值;
 }
 
+// 超预算断言比的是**前缀**，不是整句。
+//
+// 整句相等等于把错误信息本身钉成契约 —— 那样再也不能往里加诊断细节了，
+// 而这条消息恰恰**需要**细节：光一句 budget_exceeded 分不出「真花完了」
+// 和「没设 请求令牌预算、于是第一次调用预留掉了全部余量」，后者是新手
+// 必踩的坑，而且失败得完全不像预算问题（发请求之前就返回，1 毫秒）。
+//
+// 错误的**类别**才是契约，那由前缀承载。
+函数 是超预算(答: 字符串) : 整数 {
+    返回 字符串::开始于(答, "[harness] budget_exceeded");
+}
+
 函数 入口() {
     变量 普通预算: 整数 = 创建预算(6, 0);
     变量 普通: 代理 = 快代理("/v1/budget", 普通预算, 4, 1);
@@ -40,7 +53,7 @@
     否则 { IO.打印行("FAIL budget_first_response=" + 普通首答); }
     如果 (已用令牌(普通预算) == 5) { IO.打印行("PASS budget_first_usage_recorded"); }
     否则 { IO.打印行("FAIL budget_first_usage=" + 整数转字符串(已用令牌(普通预算))); }
-    如果 (普通次答 == "[harness] budget_exceeded") { IO.打印行("PASS one_token_remaining_rejects_large_response"); }
+    如果 (是超预算(普通次答) == 1) { IO.打印行("PASS one_token_remaining_rejects_large_response"); }
     否则 { IO.打印行("FAIL budget_second_response=" + 普通次答); }
     关闭代理(普通);
 
@@ -69,7 +82,7 @@
     否则 { IO.打印行("FAIL tool_first_response=" + 工具首答); }
     如果 (已用令牌(工具预算) == 11) { IO.打印行("PASS tool_both_usages_recorded"); }
     否则 { IO.打印行("FAIL tool_usage=" + 整数转字符串(已用令牌(工具预算))); }
-    如果 (工具次答 == "[harness] budget_exceeded") { IO.打印行("PASS tool_next_request_blocked"); }
+    如果 (是超预算(工具次答) == 1) { IO.打印行("PASS tool_next_request_blocked"); }
     否则 { IO.打印行("FAIL tool_second_response=" + 工具次答); }
     关闭代理(工具代理);
 
