@@ -1,6 +1,6 @@
 ---
 name: qi-harness
-description: Build LLM agents in the Qi (奇语) programming language using the qi-harness framework — an observable / retryable / evaluable wrapper around the 标准库.大模型 LLM API. Covers one-shot chat, streaming, automatic tool-call dispatch loops (parallel tool_calls), graph control flow with checkpoints and human-in-the-loop resume, structured JSON output, real token usage and budget enforcement, multi-agent teams with handoff, vector memory and hybrid-retrieval RAG, an MCP client (stdio/HTTP), guardrails, evaluation suites, tracing (OTLP), and retry with backoff. Use when the user builds Qi LLM agents, chatbots, tool-using assistants, RAG pipelines, or multi-agent systems. Requires the qi-lang skill for base language syntax.
+description: Build LLM agents in the Qi (奇语) programming language using the qi-harness framework — an observable / retryable / evaluable wrapper around the 标准库.大模型 LLM API. Covers one-shot chat, multimodal image questions (带图问), streaming, automatic tool-call dispatch loops (parallel tool_calls), graph control flow with checkpoints and human-in-the-loop resume, structured JSON output, real token usage and budget enforcement, multi-agent teams with handoff, vector memory and hybrid-retrieval RAG, an MCP client (stdio/HTTP), guardrails, evaluation suites, tracing (OTLP), and retry with backoff. Use when the user builds Qi LLM agents, chatbots, tool-using assistants, RAG pipelines, or multi-agent systems. Requires the qi-lang skill for base language syntax.
 metadata:
   author: qilang
   version: "0.2"
@@ -38,7 +38,7 @@ metadata:
 ## 代理（Agent）
 
 ```qi
-导入 Harness::{ 创建代理, 简单问, 流式问, 添加工具, 运行, 关闭代理 };
+导入 Harness::{ 创建代理, 简单问, 带图问, 流式问, 添加工具, 运行, 关闭代理 };
 
 变量 代理值: 代理 = 创建代理("助手", 会话);
 
@@ -46,6 +46,11 @@ metadata:
 
 // 1. 一次性问答（无工具）
 变量 回复: 字符串 = 简单问(代理值, "用一句话介绍 qi 语言");
+
+// 1b. 带图问答（多模态，无工具）—— 图像URL 支持 https:// 与 data:...;base64,
+//     与 简单问 同一外壳：重试/预算/真实用量/持久会话都生效（需视觉模型）。
+//     带图消息进会话历史，之后同一代理的 简单问/运行 可以继续追问这张图。
+变量 看图: 字符串 = 带图问(代理值, "这张图什么颜色？", "https://example.com/图.png");
 
 // 2. 流式问答 —— 块回调签名固定 函数(字符串): 整数
 函数 打印片段(片段: 字符串) : 整数 { IO.打印(片段); 返回 1; }
@@ -263,8 +268,9 @@ g = 添加边(g, "处理", 终点());
 关闭会话存储(库);
 ```
 
-附加后，非流式调用记录用户、provider 原始助手消息、工具结果、最终消息和错误。恢复只重放当前
-root-to-leaf 路径中的消息与工具结果。流式调用不自动记录；配置/模型/摘要 entry 不会自动恢复
+附加后，非流式调用记录用户（含 带图问 的带图消息，文本与图像 URL 分开存）、provider 原始助手
+消息、工具结果、最终消息和错误。恢复只重放当前 root-to-leaf 路径中的消息与工具结果；带图消息
+回放时重建多模态 content，图不降级为纯文本。流式调用不自动记录；配置/模型/摘要 entry 不会自动恢复
 Agent 配置。`打开内存会话存储()` 使用 SQLite `:memory:`，关闭唯一句柄后数据消失，并非独立内存 backend。
 版本 1 导入/导出 API 已可用，但存储不负责认证、租户归属或加密。
 
@@ -396,4 +402,5 @@ HTTP 持久会话、文件沙箱/报告/检索隔离和 M1 reliability。GitHub 
 QI_LLM_KEY=sk-... qi run examples/deepseek测试.qi
 QI_LLM_KEY=sk-... qi run examples/deepseek工具.qi    # 工具调用
 QI_LLM_KEY=sk-... qi run examples/deepseek流式.qi    # 流式
+QI_CHAT_URL=... QI_CHAT_KEY=... QI_VL_MODEL=... qi run examples/带图问答.qi  # 带图问答
 ```
