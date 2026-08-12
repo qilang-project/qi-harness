@@ -106,6 +106,9 @@ fi
 run_suite "Release policy" scripts/tests/run.sh
 run_suite "offline gate exit propagation" tests/offline_gate/run.sh
 run_suite "Public API baseline" ./check-public-api.py
+# 同包内同名同元数的函数 = 歧义。本地几乎撞不到（要某个编译单元同时拉进两个模块
+# 才暴露），一路绿到 CI 才红，而且红在看着无关的地方 —— 所以要有一条专门盯它的。
+run_suite "Function name collisions" python3 scripts/查同名冲突.py
 run_suite "All example syntax" ./check-examples.py
 
 run_suite "Harness syntax" qi check Harness.qi
