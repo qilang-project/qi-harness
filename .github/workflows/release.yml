@@ -19,7 +19,7 @@ jobs:
   preflight:
     name: Release policy preflight
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
       source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
@@ -82,6 +82,28 @@ jobs:
           echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
           echo "version=$baseline_version" >> "$GITHUB_OUTPUT"
 
+      # 钉的 qi 源码用 inkwell/llvm-sys-211，要 LLVM 21。不装的话报
+      # `No suitable version of LLVM was found` —— 与 ci.yml 保持一致。
+      - name: Install LLVM 21 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential lsb-release wget \
+            software-properties-common gnupg libssl-dev libsqlite3-dev pkg-config
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y libpolly-21-dev libzstd-dev libxml2-dev
+          echo "LLVM_SYS_211_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
+          sudo ./llvm.sh 17
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 200
+
+      - name: Install LLVM 21 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@21
+          echo "LLVM_SYS_211_PREFIX=$(brew --prefix llvm@21)" >> $GITHUB_ENV
+
       - name: Build pinned Qi source
         shell: bash
         run: |
@@ -121,9 +143,31 @@ jobs:
     name: Build and verify source package
     needs: preflight
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # 钉的 qi 源码用 inkwell/llvm-sys-211，要 LLVM 21。不装的话报
+      # `No suitable version of LLVM was found` —— 与 ci.yml 保持一致。
+      - name: Install LLVM 21 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential lsb-release wget \
+            software-properties-common gnupg libssl-dev libsqlite3-dev pkg-config
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y libpolly-21-dev libzstd-dev libxml2-dev
+          echo "LLVM_SYS_211_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
+          sudo ./llvm.sh 17
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 200
+
+      - name: Install LLVM 21 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@21
+          echo "LLVM_SYS_211_PREFIX=$(brew --prefix llvm@21)" >> $GITHUB_ENV
 
       - name: Build pinned Qi source
         shell: bash

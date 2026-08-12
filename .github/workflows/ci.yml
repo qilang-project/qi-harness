@@ -32,12 +32,38 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
+
+      # 钉的 qi 源码用 inkwell/llvm-sys-211，要 LLVM 21。runner 上没有，
+      # 报的是 `No suitable version of LLVM was found system-wide or pointed
+      # to by LLVM_SYS_211_PREFIX` —— 这一步以前压根没有，所以从来没走到过。
+      # 与 qi 仓自己的 CI 保持一致。
+      - name: Install LLVM 21 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential lsb-release wget \
+            software-properties-common gnupg libssl-dev libsqlite3-dev pkg-config
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y libpolly-21-dev libzstd-dev libxml2-dev
+          echo "LLVM_SYS_211_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
+          # qi 生成的是不透明指针(ptr) IR：另装 clang-17 专供编译 .ll，
+          # 与构建 qi 用的 LLVM 21 是两回事。
+          sudo ./llvm.sh 17
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 200
+
+      - name: Install LLVM 21 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@21
+          echo "LLVM_SYS_211_PREFIX=$(brew --prefix llvm@21)" >> $GITHUB_ENV
 
       - name: Build pinned Qi source
         shell: bash
