@@ -23,10 +23,15 @@ ROOT = HARNESS.parent
 # 本地想测「刚构建的那份」就传 QI_BIN —— 装在 PATH 上的往往是旧拷贝。
 QI = os.environ.get("QI_BIN", "qi")
 RUNTIME = os.environ.get("QI_RUNTIME_LIB", "")
-# 从 qi-test 里跑：它的 qi_packages/ 是指向真源码的符号链接。
-# 别在 /tmp 下跑 —— 编译器会往上逐级扫每个子目录找同名包，
-# 祖先目录里任何一份残留副本都会静默盖掉这里指定的那个。
+# 在哪个目录起 qi。
+#
+# monorepo 里用 qi-test：它的 qi_packages/ 是指向真源码的符号链接。
+# 但 CI 里 qi-harness 是**独立 checkout**，根本没有兄弟目录 qi-test ——
+# 写死就是 FileNotFoundError。那边靠 QI_PACKAGES_PATH 定位依赖，
+# 从 harness 根起就行。
 CWD = ROOT / "qi-test"
+if not CWD.is_dir():
+    CWD = HARNESS
 
 HEX16 = re.compile(r"^[0-9a-f]{16}$")
 HEX32 = re.compile(r"^[0-9a-f]{32}$")
