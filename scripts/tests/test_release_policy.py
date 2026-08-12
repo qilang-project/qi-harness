@@ -213,6 +213,43 @@ class QiSourcePolicyTests(unittest.TestCase):
             self.assertIn("05568a72a92698502fe006bd3223536e9cb04887", text)
             self.assertIn("ceada461d2aca568b2b3788f3b310fcc07748423", text)
 
+    def test_source_ref_validation_accepts_the_pinned_shas(self) -> None:
+        """install-qi-source.sh 的 SHA 校验必须真的放行我们钉的那些 SHA。
+
+        它曾经是一长串 40 个 [0-9a-f] 的 glob —— 实际只写了 39 个，于是
+        **任何合法的完整 SHA 都过不了**，CI 从第一步就无条件失败（13 秒挂掉，
+        看着像环境问题，真因要读日志才看得出来）。
+        单元测试挡不住手数字符，所以这里直接拿工作流里真正钉的 SHA 去跑一遍。
+        """
+        script = ROOT / "scripts" / "install-qi-source.sh"
+        text = script.read_text(encoding="utf-8")
+        self.assertNotIn("[0-9a-f][0-9a-f][0-9a-f]", text,
+                         "别用手数长度的 glob 判 SHA，用长度 + 字符集两条")
+
+        # 把校验那几行抠出来单独跑，不去真 clone 仓库
+        harness = """
+check() {
+  source_ref=$1; name=TEST
+  case "$source_ref" in
+    *[!0-9a-f]*) exit 1 ;;
+  esac
+  test "${#source_ref}" -eq 40 || exit 1
+  exit 0
+}
+check "$1"
+"""
+        refs = re.findall(r"^\s*QI_\w*SOURCE_REF: ([0-9a-f]+)\s*$",
+                          (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"),
+                          re.MULTILINE)
+        self.assertTrue(refs, "ci.yml 里没找到任何 *_SOURCE_REF")
+        for ref in refs:
+            done = subprocess.run(["sh", "-c", harness, "sh", ref], cwd=ROOT)
+            self.assertEqual(done.returncode, 0, f"钉的 SHA 被自家校验拒了: {ref}")
+
+        for bad in ("05568a72", "main", "05568a72a92698502fe006bd3223536e9cb0488z"):
+            done = subprocess.run(["sh", "-c", harness, "sh", bad], cwd=ROOT)
+            self.assertEqual(done.returncode, 1, f"该拒的却放行了: {bad}")
+
     def test_release_runs_canonical_gate_with_pinned_web_package(self) -> None:
         text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("QI_WEB_REF:", text)

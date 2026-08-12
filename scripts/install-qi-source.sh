@@ -28,10 +28,20 @@ checkout_source() {
         printf 'error: set %s_SOURCE_DIR or a pinned %s_SOURCE_REF\n' "$name" "$name" >&2
         exit 1
     }
+    # 长度和字符集**分开**判，别写一长串 [0-9a-f]：那玩意儿要手数 40 个，
+    # 数错一个就是「所有合法 SHA 全被拒」—— 原来实际写成了 39 个，于是这条门禁
+    # 从引入起就无条件失败，CI 一直红在第一步（13 秒就挂，看着像环境问题）。
     case "$source_ref" in
-        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-        *) printf 'error: %s_SOURCE_REF must be a full commit SHA, got %s\n' "$name" "$source_ref" >&2; exit 1 ;;
+        *[!0-9a-f]*)
+            printf 'error: %s_SOURCE_REF must be a full commit SHA, got %s\n' \
+                "$name" "$source_ref" >&2
+            exit 1 ;;
     esac
+    test "${#source_ref}" -eq 40 || {
+        printf 'error: %s_SOURCE_REF must be a full commit SHA (40 hex chars), got %s chars: %s\n' \
+            "$name" "${#source_ref}" "$source_ref" >&2
+        exit 1
+    }
     git clone --quiet --no-checkout "$repository" "$destination"
     git -C "$destination" checkout --quiet --detach "$source_ref"
     test "$(git -C "$destination" rev-parse HEAD)" = "$source_ref"
