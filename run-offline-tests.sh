@@ -123,6 +123,18 @@ run_suite "event bus" tests/run-qi-test.sh tests/events/lifecycle_event_test.qi
 run_suite "Agent lifecycle" tests/events/run-agent-lifecycle.sh
 run_clean_path_suite "event adapters" /tmp/qi_event_adapter_trace.jsonl \
     tests/run-qi-test.sh tests/events/event_adapters_test.qi
+# 可观测性。三层分开跑是有意的，因为它们的失败方式完全不同：
+#   跨度树   纯内存，喂合成事件 —— 树的形状对不对
+#   OTLP     真 collector 收字节 —— parentSpanId 这类只有对面才看得见的东西
+#   端到端   真跑 agent —— 事件载荷（token / 工具名）有没有真填上
+run_suite "span tree" tests/run-qi-test.sh tests/observability/跨度树_测.qi
+# 并发采集：五路 goroutine 同时灌事件。摘掉采集锁时实测 5/5 都能抓到串台，
+# 装着锁 6/6 全绿 —— 是真回归测试，不是摆设。
+run_suite "span concurrency" tests/run-qi-test.sh tests/observability/并发采集_测.qi
+run_suite "OTLP export" python3 tests/observability/跑OTLP测.py
+run_suite "observability end-to-end" python3 tests/observability/跑端到端.py
+# 看板要 qi-web（观测台/观测指标 依赖它，故意不从 Harness.qi re-export）
+run_suite "observability dashboard" python3 tests/observability/跑观测台测.py
 run_suite "tool pipeline" tests/run-qi-test.sh tests/tool_pipeline/工具管线_测.qi
 run_suite "tool scheduling" tests/tool_scheduling/run.sh
 run_discovered_test "run configuration" \

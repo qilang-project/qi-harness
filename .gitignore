@@ -9,6 +9,10 @@ examples/工具助手
 examples/seo审计/服务
 examples/seo审计/seo命令行
 
+# 可观测性测试的编译产物。
+# 只有观测台那条会留下来：它是被 python 用 terminate 打断的，qi 来不及自清。
+tests/observability/观测台_测
+
 # 运行产物
 *.db
 examples/qi_packages/

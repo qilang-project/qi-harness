@@ -14,6 +14,9 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 TEST_DIR = Path(__file__).resolve().parent
 FIXTURE = ROOT / "tests" / "m1_reliability" / "fake_openai.py"
+# PATH 上那个 qi 往往是**旧拷贝**（装的时候复制过去的，不是符号链接），
+# 改了编译器不重装就还是老的 —— 于是测的根本不是刚改的那份。
+QI_BIN = os.environ.get("QI_BIN", "qi")
 
 
 def main() -> int:
@@ -47,7 +50,7 @@ def main() -> int:
             env = os.environ.copy()
             env["QI_TEST_URL"] = f"http://127.0.0.1:{port}"
             completed = subprocess.run(
-                ["qi", "run", str(TEST_DIR / "agent_lifecycle_test.qi")],
+                [QI_BIN, "run", str(TEST_DIR / "agent_lifecycle_test.qi")],
                 cwd=ROOT,
                 env=env,
                 text=True,

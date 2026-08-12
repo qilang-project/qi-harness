@@ -16,7 +16,10 @@ qi-harness/
 ├── 对话.qi             # 助手消息 + 工具调用解析
 ├── 工具.qi             # Tool 定义 + 注册表 + 派发
 ├── 代理.qi             # Agent loop（核心）— 自动 tool_call dispatch
-├── 追踪.qi             # event log（JSON 行，可挂 sink）
+├── 追踪.qi             # event log（JSON 行，可挂 sink）+ OTLP 编码
+├── 跨度.qi             # 从生命周期事件流还原调用树（主循环零改动）
+├── 观测指标.qi         # Prometheus 指标（复用 qi-web 注册表；依赖 qi-web）
+├── 观测台.qi           # 实时看板：运行列表 + 瀑布图 + /metrics（依赖 qi-web）
 ├── 重试.qi             # exponential backoff
 ├── 评估.qi             # Eval harness — 跑测试用例 + 期望对比
 ├── 循环.qi             # Loop engineering — 目标驱动递归循环：制造者→校验者→升级
@@ -404,19 +407,76 @@ token、设上限、达到上限即停止下一次调用——防 agent 循环�
 ```
 演示：`qi run examples/护栏_测.qi`（离线 12/12）
 
-## 可观测：OTLP 导出
+## 可观测性
 
-span 除了打 stderr/文件，还能导到 **OpenTelemetry collector**（Jaeger / Tempo / Grafana / Langfuse）：
+三条出口，**同一份数据**：内建看板看当下，Prometheus 做告警，OTLP 做长期存储和跨服务关联。
+
+底座是 `跨度.qi`：它订阅生命周期总线，把 `agent_start/turn_start/llm_start/tool_start`
+这串**本来就配对且正确嵌套**的事件，用一个栈还原成带父子关系的调用树。
+所以代理主循环一行都不用改，采集器完全在旁路。
 
 ```qi
-导入 Harness.追踪::{设置OTLP, 新追踪, 开始跨度, 结束跨度};
-新追踪();
-设置OTLP("http://localhost:4318");    // 每个完成的 span POST 到 {基址}/v1/traces
-变量 s = 开始跨度("llm", "助手", "调模型", 0);
-结束跨度(s, "助手", "llm", "返回", 1234, 0);   // → 标准 OTLP resourceSpans JSON
+导入 Harness.跨度::{安装跨度采集器, 跨度树JSON, 最近运行JSON};
+安装跨度采集器();
+运行(代理值, "…");
+IO.打印行(跨度树JSON(""));       // "" = 最近一次运行
 ```
-trace_id 32-hex、span_id 16-hex、纳秒时间戳、attributes(agent/tokens/cost)——标准 OTLP/HTTP，
-真实 collector 直接可摄入。
+
+### 实时看板
+
+```qi
+导入 Harness.观测台::{开观测台};
+开观测台(47123);                  // 后台起，不挡住你的 agent
+```
+
+打开 `http://127.0.0.1:47123/`：左边最近的运行，右边**瀑布图**（哪一步慢、
+哪一步贵、哪个工具红了），每秒刷一次、只推变化的部分。
+零外部依赖 —— 不用先起一套 Jaeger 才回答得了「这次跑了 40 秒，时间花哪了」。
+
+演示：`qi run examples/观测台演示.qi`
+
+> 观测台 / 观测指标 **依赖 qi-web**，所以故意不从 `Harness.qi` re-export ——
+> 不看板的程序不该被拖进一个 web 框架。
+
+### Prometheus
+
+看板进程上配 `QI_METRICS_TOKEN` 就有 `/metrics`：
+
+| 指标 | 说明 |
+|---|---|
+| `harness_agent_runs_total{agent,status}` | 运行次数 |
+| `harness_agent_run_duration_seconds` | 整次运行耗时（慢桶） |
+| `harness_llm_calls_total{agent,status}` | LLM 调用次数 |
+| `harness_llm_duration_seconds` | 单次 LLM 耗时（慢桶） |
+| `harness_llm_tokens_total` / `harness_llm_cost_cents_total` | 真实用量与成本 |
+| `harness_tool_calls_total{agent,tool,status}` | 工具调用与失败率 |
+| `harness_tool_duration_seconds{tool}` | 工具耗时（快桶） |
+| `harness_errors_total{kind,reason}` | 出错跨度 |
+
+时延用 **慢桶**（到分钟级）：LLM 动辄十几秒，用默认快桶会全落进 `+Inf`，
+分位数等于没有。标签只用 agent / tool / status —— run_id 这类高基数的绝不当标签。
+
+### OTLP（Jaeger / Tempo / Langfuse）
+
+```qi
+导入 Harness.追踪::{设置OTLP, 设置服务名};
+导入 Harness.跨度::{跨度树JSON};
+导入 Harness.追踪::{导出树到OTLP};
+
+设置OTLP("http://localhost:4318");
+设置服务名("旅行助手");
+运行(代理值, "…");
+导出树到OTLP(跨度树JSON(""));      // 整棵树一次 POST
+```
+
+trace_id 32-hex（run_id 去横杠）、span_id 16-hex、**parentSpanId**、纳秒时间戳、
+attributes(agent/tokens/cost/error)。默认异步发 —— collector 的 RTT 不该串进 agent
+的关键路径；测试里要断言送达就 `设置OTLP同步(1)`。
+
+> 早先的实现漏了 `parentSpanId`，qi 侧一切正常、collector 也照收，
+> 但推到 Jaeger 是一堆**孤儿 span** —— 树全散了，而树恰恰是用 tracing 的唯一理由。
+> 所以 `tests/observability/` 里有一个真 collector 收字节做断言，
+> 只靠 qi 自测「我发出去了」发现不了这类问题。
 
 ## 文件系统工具（沙箱 + 权限）
 

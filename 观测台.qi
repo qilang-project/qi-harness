@@ -1,0 +1,365 @@
+// 观测台 — agent 的实时看板（跑在你自己的进程里）
+//
+// 左边最近的运行，右边那次运行的**瀑布图**，下面几个当场算的指标。
+// 数据来自 Harness.跨度 的内存跨度树，所以：
+//   · 不需要 collector、不需要 docker、不需要外部依赖，一行代码起来
+//   · 只看得到**本进程**的运行 —— 多实例要汇总请走 OTLP / Prometheus
+//   · 进程重启就没了（内存里只留最近 N 次）
+//
+// ── 为什么值得有一个内建的 ──────────────────────────────────────
+//
+// 「这次跑了 40 秒，时间花哪了」是调 agent 最常问的问题，而这个问题
+// 不该需要先起一套 Jaeger + Collector 才答得上来。要长期存储和跨服务
+// 关联时再上 OTLP（追踪.设置OTLP），两条路的数据同源。
+//
+// ── 用法 ────────────────────────────────────────────────────────
+//
+//     导入 Harness.观测台::{开观测台};
+//     函数 入口() {
+//         开观测台(47123);              // 后台起，不挡住你的 agent
+//         变量 代理值 = 创建代理(...);
+//         运行(代理值, "...");           // 边跑边在浏览器里看
+//     }
+
+包 Harness;
+
+导入 标准库.字符串;
+导入 标准库.JSON 作为 J;
+导入 标准库.输入输出 作为 IO;
+导入 Web::{
+    应用, 上下文, 响应, 创建应用, 配置, 运行应用, 获取, HTML, 转义HTML,
+    实时WS路由带准入, 实时运行时构建, 样式标签
+};
+// 指标模块没从 Web.qi 转出，要走全名
+导入 Web.指标::{挂指标};
+导入 Harness.跨度::{最近运行JSON, 跨度树JSON, 运行数, 安装跨度采集器};
+导入 Harness.观测指标::{安装观测指标};
+
+变量 页面标题: 字符串 = "qi-harness 观测台";
+
+公开 函数 设置观测台标题(标题: 字符串) : 整数 {
+    如果 (字符串::字节长度(标题) == 0) { 返回 0; }
+    页面标题 = 标题;
+    返回 1;
+}
+
+// ——— 小工具 ———
+
+// 毫秒 → 人看的。瀑布图上一列数字，宽度要稳定，所以固定两位有效。
+函数 人读耗时(毫秒: 整数) : 字符串 {
+    如果 (毫秒 < 0) { 返回 "…"; }
+    如果 (毫秒 < 1000) { 返回 整数转字符串(毫秒) + "ms"; }
+    变量 秒: 整数 = 毫秒 / 1000;
+    变量 余: 整数 = (毫秒 - 秒 * 1000) / 100;
+    如果 (秒 < 60) { 返回 整数转字符串(秒) + "." + 整数转字符串(余) + "s"; }
+    变量 分: 整数 = 秒 / 60;
+    返回 整数转字符串(分) + "m" + 整数转字符串(秒 - 分 * 60) + "s";
+}
+
+// token 数：4 位以上折成 k，看板上不需要精确到个位
+函数 人读令牌(数量: 整数) : 字符串 {
+    如果 (数量 < 1000) { 返回 整数转字符串(数量); }
+    变量 千: 整数 = 数量 / 1000;
+    返回 整数转字符串(千) + "." + 整数转字符串((数量 - 千 * 1000) / 100) + "k";
+}
+
+// 成本存的是分
+函数 人读成本(分: 整数) : 字符串 {
+    变量 元: 整数 = 分 / 100;
+    变量 余: 整数 = 分 - 元 * 100;
+    变量 尾: 字符串 = 整数转字符串(余);
+    如果 (余 < 10) { 尾 = "0" + 尾; }
+    返回 "¥" + 整数转字符串(元) + "." + 尾;
+}
+
+// 百分比（整数），分母为 0 时给 0 —— 不做这个防御就是除零崩溃，
+// 而「刚开始跑、总耗时还是 0」是必然会出现的一帧。
+函数 占比(分子: 整数, 分母: 整数) : 整数 {
+    如果 (分母 <= 0) { 返回 0; }
+    变量 v: 整数 = 分子 * 100 / 分母;
+    如果 (v < 0) { 返回 0; }
+    如果 (v > 100) { 返回 100; }
+    返回 v;
+}
+
+// ——— 状态 ———
+//
+// 每连接一份。只存「选中哪次运行」，内容永远现从跨度树读 ——
+// 把树的快照存进状态的话，看板就不会自己刷新了。
+
+函数 准入放行(载荷JSON: 字符串) : 字符串 {
+    // 观测台默认监听 127.0.0.1，不问「你是谁」。要暴露到内网/公网，
+    // 自己套一层反代加认证 —— 这上面有提示词和工具参数，不是公开数据。
+    返回 "观察者";
+}
+
+函数 初始状态(身份: 字符串) : 整数 {
+    变量 状态: 整数 = J.创建对象();
+    J.设置字符串(状态, "选中", "");     // "" = 跟着最新那次
+    返回 状态;
+}
+
+函数 处理事件(状态: 整数, 事件名: 字符串, 载荷JSON: 字符串) : 整数 {
+    如果 (字符串::等于(事件名, "选运行") == 1) {
+        变量 载荷: 整数 = J.解码(载荷JSON);
+        如果 (载荷 > 0) {
+            J.设置字符串(状态, "选中", J.获取字符串(载荷, "run"));
+            J.删除(载荷);
+        }
+    }
+    如果 (字符串::等于(事件名, "跟随最新") == 1) {
+        J.设置字符串(状态, "选中", "");
+    }
+    // "刷新" 什么都不用做：事件本身就会触发一次重渲染，
+    // 而 morph 只发变化的部分 —— 这就是「实时」的全部实现。
+    返回 状态;
+}
+
+// ——— 渲染 ———
+
+函数 跨度行(项: 整数, 总耗时: 整数) : 字符串 {
+    变量 种: 字符串 = J.获取字符串(项, "t");
+    变量 名字: 字符串 = J.获取字符串(项, "n");
+    变量 深: 整数 = J.获取整数(项, "d");
+    变量 耗时: 整数 = J.获取整数(项, "ms");
+    变量 状态: 整数 = J.获取整数(项, "st");
+
+    变量 左: 整数 = 占比(J.获取整数(项, "o"), 总耗时);
+    变量 宽: 整数 = 占比(耗时, 总耗时);
+    // 快得只有几毫秒的 span 算出来是 0% —— 画不出来等于「没发生过」。
+    // 给一个最小可见宽度，宁可略微失真也不能让人看不见它。
+    如果 (宽 < 1) { 宽 = 1; }
+    如果 (左 + 宽 > 100) { 左 = 100 - 宽; }
+
+    变量 条类: 字符串 = "obs-bar kind-" + 转义HTML(种);
+    如果 (状态 == 2) { 条类 = 条类 + " is-error"; }
+    如果 (耗时 < 0) { 条类 = 条类 + " is-running"; }
+
+    变量 缩进: 字符串 = "margin-left:" + 整数转字符串(深 * 14) + "px";
+    变量 位置: 字符串 = "left:" + 整数转字符串(左) + "%;width:" + 整数转字符串(宽) + "%";
+
+    变量 右侧: 字符串 = 人读耗时(耗时);
+    变量 令牌: 整数 = J.获取整数(项, "tok");
+    如果 (令牌 > 0) { 右侧 = 右侧 + " · " + 人读令牌(令牌); }
+
+    变量 行: 字符串 = "<div class=\"obs-row\">";
+    行 = 行 + "<span class=\"obs-label\" style=\"" + 缩进 + "\">";
+    行 = 行 + "<i class=\"obs-dot kind-" + 转义HTML(种) + "\"></i>";
+    行 = 行 + 转义HTML(名字) + "</span>";
+    行 = 行 + "<span class=\"obs-track\"><i class=\"" + 条类
+        + "\" style=\"" + 位置 + "\"></i></span>";
+    行 = 行 + "<span class=\"obs-dur\">" + 转义HTML(右侧) + "</span>";
+    行 = 行 + "</div>";
+
+    如果 (状态 == 2) {
+        行 = 行 + "<div class=\"obs-err\" style=\"" + 缩进 + "\">✗ "
+            + 转义HTML(J.获取字符串(项, "err")) + "</div>";
+    }
+    返回 行;
+}
+
+函数 渲染瀑布(选中: 字符串) : 字符串 {
+    变量 树: 字符串 = 跨度树JSON(选中);
+    变量 根: 整数 = J.解码(树);
+    如果 (根 <= 0) { 返回 "<div class=\"obs-empty\">还没有数据</div>"; }
+
+    变量 运行ID: 字符串 = J.获取字符串(根, "run");
+    如果 (字符串::字节长度(运行ID) == 0) {
+        J.删除(根);
+        返回 "<div class=\"obs-empty\">还没有跑过 agent。<br>"
+            + "装了采集器之后，跑一次就会出现在这里。</div>";
+    }
+
+    变量 总耗时: 整数 = J.获取整数(根, "ms");
+    变量 在跑: 整数 = J.获取整数(根, "live");
+    变量 状态标: 字符串 = "<span class=\"obs-tag done\">已完成</span>";
+    如果 (在跑 == 1) { 状态标 = "<span class=\"obs-tag live\">运行中</span>"; }
+
+    变量 头: 字符串 = "<div class=\"obs-head\">";
+    头 = 头 + "<b>" + 转义HTML(J.获取字符串(根, "agent")) + "</b>";
+    头 = 头 + 状态标;
+    头 = 头 + "<span class=\"obs-mono\">" + 转义HTML(运行ID) + "</span>";
+    头 = 头 + "</div>";
+    头 = 头 + "<div class=\"obs-sum\">";
+    头 = 头 + "<span>耗时 <b>" + 转义HTML(人读耗时(总耗时)) + "</b></span>";
+    头 = 头 + "<span>令牌 <b>" + 转义HTML(人读令牌(J.获取整数(根, "tokens"))) + "</b></span>";
+    头 = 头 + "<span>成本 <b>" + 转义HTML(人读成本(J.获取整数(根, "cost"))) + "</b></span>";
+    头 = 头 + "</div>";
+
+    变量 跨度们: 整数 = J.获取数组(根, "spans");
+    变量 数量: 整数 = J.数组长度(跨度们);
+    变量 体: 字符串 = "";
+    变量 i: 整数 = 0;
+    当 (i < 数量) {
+        体 = 体 + 跨度行(J.数组获取对象(跨度们, i), 总耗时);
+        i = i + 1;
+    }
+    J.删除(根);
+    返回 头 + "<div class=\"obs-wf\">" + 体 + "</div>";
+}
+
+函数 渲染运行列表(选中: 字符串) : 字符串 {
+    变量 文本: 字符串 = 最近运行JSON(30);
+    变量 根: 整数 = J.解码(文本);
+    如果 (根 <= 0) { 返回 ""; }
+    变量 数量: 整数 = J.数组长度(根);
+    如果 (数量 == 0) {
+        J.删除(根);
+        返回 "<div class=\"obs-empty\">暂无运行</div>";
+    }
+
+    变量 体: 字符串 = "";
+    变量 i: 整数 = 0;
+    当 (i < 数量) {
+        变量 项: 整数 = J.数组获取对象(根, i);
+        变量 运行ID: 字符串 = J.获取字符串(项, "run");
+        变量 类: 字符串 = "obs-item";
+        // 选中为空 = 跟随最新，此时高亮第一条
+        如果 (字符串::等于(运行ID, 选中) == 1) { 类 = 类 + " on"; }
+        如果 (字符串::字节长度(选中) == 0 && i == 0) { 类 = 类 + " on"; }
+        如果 (J.获取整数(项, "live") == 1) { 类 = 类 + " live"; }
+
+        // data-value-run → 上行载荷里的 "run"。属性名必须英文。
+        体 = 体 + "<div class=\"" + 类 + "\" data-click=\"选运行\" data-value-run=\""
+            + 转义HTML(运行ID) + "\" data-key=\"" + 转义HTML(运行ID) + "\">";
+        体 = 体 + "<div class=\"obs-item-top\"><b>"
+            + 转义HTML(J.获取字符串(项, "agent")) + "</b>"
+            + "<span>" + 转义HTML(人读耗时(J.获取整数(项, "ms"))) + "</span></div>";
+        体 = 体 + "<div class=\"obs-item-sub\">"
+            + 整数转字符串(J.获取整数(项, "spans")) + " 跨度 · "
+            + 转义HTML(字符串::子串(运行ID, 0, 8)) + "</div>";
+        体 = 体 + "</div>";
+        i = i + 1;
+    }
+    J.删除(根);
+    返回 体;
+}
+
+函数 渲染(状态: 整数) : 字符串 {
+    变量 选中: 字符串 = J.获取字符串(状态, "选中");
+    变量 页: 字符串 = "<div class=\"obs-top\">";
+    页 = 页 + "<b>" + 转义HTML(页面标题) + "</b>";
+    页 = 页 + "<span class=\"obs-muted\">" + 整数转字符串(运行数()) + " 次运行</span>";
+    页 = 页 + "<button class=\"obs-btn\" data-click=\"跟随最新\">跟随最新</button>";
+    页 = 页 + "</div>";
+    页 = 页 + "<div class=\"obs-main\">";
+    页 = 页 + "<div class=\"obs-side\">" + 渲染运行列表(选中) + "</div>";
+    页 = 页 + "<div class=\"obs-detail\">" + 渲染瀑布(选中) + "</div>";
+    页 = 页 + "</div>";
+    返回 页;
+}
+
+// ——— 页面外壳 ———
+//
+// 自己写外壳（而不是用 实时路由_无鉴权）是为了塞两样东西：
+// 瀑布图的 CSS，和那个每秒 qiSend("刷新") 的定时器。
+
+函数 观测台样式() : 字符串 {
+    变量 s: 字符串 = "<style>";
+    s = s + ".obs-top{display:flex;align-items:center;gap:12px;padding:10px 14px;";
+    s = s + "border-bottom:1px solid #e5e7eb;background:#fff;position:sticky;top:0;z-index:5}";
+    s = s + ".obs-muted{color:#6b7280;font-size:13px}";
+    s = s + ".obs-btn{margin-left:auto;font-size:13px;padding:4px 10px;border:1px solid #d1d5db;";
+    s = s + "border-radius:6px;background:#fff;cursor:pointer}";
+    s = s + ".obs-main{display:flex;align-items:flex-start;gap:0;min-height:70vh}";
+    s = s + ".obs-side{width:230px;flex:none;border-right:1px solid #e5e7eb;";
+    s = s + "max-height:88vh;overflow:auto}";
+    s = s + ".obs-detail{flex:1;padding:14px 18px;min-width:0}";
+    s = s + ".obs-item{padding:8px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer}";
+    s = s + ".obs-item:hover{background:#f9fafb}";
+    s = s + ".obs-item.on{background:#eef2ff;box-shadow:inset 3px 0 0 #6366f1}";
+    s = s + ".obs-item-top{display:flex;justify-content:space-between;gap:8px;font-size:13px}";
+    s = s + ".obs-item-sub{color:#9ca3af;font-size:11px;margin-top:2px;font-family:ui-monospace,monospace}";
+    s = s + ".obs-item.live .obs-item-top b::after{content:' ●';color:#10b981}";
+    s = s + ".obs-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}";
+    s = s + ".obs-mono{font-family:ui-monospace,monospace;color:#9ca3af;font-size:12px}";
+    s = s + ".obs-tag{font-size:11px;padding:1px 7px;border-radius:99px}";
+    s = s + ".obs-tag.live{background:#d1fae5;color:#065f46}";
+    s = s + ".obs-tag.done{background:#f3f4f6;color:#4b5563}";
+    s = s + ".obs-sum{display:flex;gap:18px;font-size:13px;color:#4b5563;margin-bottom:14px}";
+    s = s + ".obs-wf{font-size:12px}";
+    s = s + ".obs-row{display:flex;align-items:center;gap:10px;height:24px}";
+    s = s + ".obs-label{width:210px;flex:none;white-space:nowrap;overflow:hidden;";
+    s = s + "text-overflow:ellipsis;color:#374151}";
+    s = s + ".obs-dot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px}";
+    // 一眼分清 llm / tool / 结构层，颜色跟条一致
+    s = s + ".kind-llm{background:#6366f1}.kind-tool{background:#f59e0b}";
+    s = s + ".kind-agent{background:#94a3b8}.kind-turn{background:#cbd5e1}";
+    s = s + ".kind-retry{background:#ef4444}";
+    s = s + ".obs-track{position:relative;flex:1;height:14px;background:#f3f4f6;border-radius:3px}";
+    s = s + ".obs-bar{position:absolute;top:0;height:14px;border-radius:3px;min-width:2px}";
+    s = s + ".obs-bar.is-error{background:#ef4444}";
+    // 还在跑的条用条纹动效，静止的图上一眼能看出「这个没结束」
+    s = s + ".obs-bar.is-running{background:repeating-linear-gradient(45deg,";
+    s = s + "#a5b4fc 0 6px,#c7d2fe 6px 12px)}";
+    s = s + ".obs-dur{width:96px;flex:none;text-align:right;color:#6b7280;";
+    s = s + "font-family:ui-monospace,monospace}";
+    s = s + ".obs-err{color:#b91c1c;font-size:11px;padding:0 0 4px 17px}";
+    s = s + ".obs-empty{color:#9ca3af;padding:40px 0;text-align:center;line-height:1.7}";
+    s = s + "body{margin:0;font-family:system-ui,-apple-system,'PingFang SC',sans-serif}";
+    s = s + "</style>";
+    返回 s;
+}
+
+// 定时刷新。JS 里的标识符一律英文 —— 上下文全是中文时最容易顺手写成中文变量，
+// 而中文标识符在压缩、source map、别人接手时全是麻烦。
+函数 轮询脚本() : 字符串 {
+    变量 s: 字符串 = "<script>";
+    s = s + "(function(){";
+    // 页面在后台时别刷：一堆挂着的标签页每秒都在让服务端重渲染，
+    // 而没人在看。document.hidden 一个判断就省掉。
+    s = s + "setInterval(function(){";
+    s = s + "if(document.hidden){return;}";
+    s = s + "if(window.qiSend){window.qiSend('刷新',{});}";
+    s = s + "},1000);";
+    s = s + "})();";
+    s = s + "</script>";
+    返回 s;
+}
+
+函数 观测台页(上下文值: 上下文) : 响应 {
+    变量 状态: 整数 = 初始状态("观察者");
+    变量 首屏: 字符串 = 渲染(状态);
+    J.删除(状态);
+
+    变量 页: 字符串 = "<!DOCTYPE html>\n<html lang=\"zh\">\n<head>\n";
+    页 = 页 + "<meta charset=\"utf-8\">\n";
+    页 = 页 + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
+    页 = 页 + "<title>" + 转义HTML(页面标题) + "</title>\n";
+    页 = 页 + 样式标签() + 观测台样式();
+    页 = 页 + "</head>\n<body>\n";
+    页 = 页 + "<div id=\"qi-live\">" + 首屏 + "</div>\n";
+    页 = 页 + 实时运行时构建("/ws", "", 0);
+    页 = 页 + 轮询脚本();
+    页 = 页 + "\n</body>\n</html>\n";
+    返回 HTML(页);
+}
+
+// ——— 起服务 ———
+
+公开 函数 观测台应用() : 应用 {
+    变量 应用值: 应用 = 创建应用();
+    应用值 = 获取(应用值, "/", 观测台页);
+    应用值 = 实时WS路由带准入(应用值, "/ws", 准入放行, 初始状态, 渲染, 处理事件);
+    // /metrics 只在配了 QI_METRICS_TOKEN 时才真的挂上（qi-web 的策略）
+    应用值 = 挂指标(应用值);
+    返回 应用值;
+}
+
+// goroutine 入口。启动 不支持内联闭包，所以要顶层具名函数。
+公开 函数 观测台工人(端口: 整数) {
+    变量 应用值: 应用 = 配置(观测台应用(), "127.0.0.1", 端口);
+    运行应用(应用值);
+}
+
+// 一行起看板。**后台跑**，不挡住调用方的 agent。
+//
+// 顺手把采集器和指标也装了 —— 忘装采集器的话看板永远是空的，
+// 而空看板看着像「我的 agent 没跑」，排查方向整个错掉。
+公开 函数 开观测台(端口: 整数) : 整数 {
+    安装跨度采集器();
+    安装观测指标();
+    IO.打印行("观测台: http://127.0.0.1:" + 整数转字符串(端口) + "/");
+    启动 观测台工人(端口);
+    返回 端口;
+}

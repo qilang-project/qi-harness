@@ -288,7 +288,11 @@ Agent 配置。`打开内存会话存储()` 使用 SQLite `:memory:`，关闭唯
 非流式 `运行`、`简单问`、`结构化运行` 和 `结构化运行严格` 会发 canonical lifecycle v1：
 `agent_start/end`、`turn_start/end`、`llm_start/end`，以及 `运行` 的 `tool_start/end`。
 总线是进程内同步订阅，按注册顺序交付，不能捕获回调 panic。事件模块支持显式 bus 句柄，但 Agent
-当前固定发到默认 bus，尚不能给单个 Agent 注入自定义 bus；多数 Agent lifecycle payload 仍是空对象。
+当前固定发到默认 bus，尚不能给单个 Agent 注入自定义 bus。
+
+payload：`llm_end` 带真实用量（`tokens` / `prompt_tokens` / `completion_tokens`），
+`tool_start` / `tool_end` 带 `tool` 与 `name`，`error` 带 `source` / `reason`。
+其余（`agent_*` / `turn_*`）仍是空对象。
 
 ```qi
 导入 Harness.事件::{订阅生命周期事件, 清空生命周期订阅者};
@@ -313,6 +317,40 @@ trace/report adapters 是 opt-in，避免和 Agent 仍保留的 legacy 直写 tr
 legacy trace 类型包括 `llm_call` / `llm_response` / `tool_call` / `tool_result` / `error` /
 `done` / `stream_start` / `stream_chunk` / `stream_end`。流式 API 当前只走这套 legacy trace，
 尚未接入 canonical lifecycle。
+
+## 跨度树 / 看板 / 指标 / OTLP
+
+`Harness.跨度` 订阅生命周期总线，把配对且嵌套的事件还原成调用树 —— 主循环零改动。
+
+```qi
+导入 Harness.跨度::{安装跨度采集器, 跨度树JSON, 最近运行JSON};
+安装跨度采集器();
+运行(代理值, "…");
+IO.打印行(跨度树JSON(""));      // "" = 最近一次
+```
+
+树 JSON 的键是**英文线上协议**：`spans[]` 每项 `{i,p,t,n,d,o,ms,tok,cost,st}` ——
+`p` 是父的 run 内局部下标（`-1` 为根），`o` 是相对运行起点的偏移毫秒，
+`st` 0 进行中 / 1 成功 / 2 出错。
+
+实时看板（依赖 qi-web，故意不从 `Harness.qi` re-export）：
+
+```qi
+导入 Harness.观测台::{开观测台};
+开观测台(47123);    // 后台起；顺带装好采集器和 Prometheus 指标
+```
+
+推给 collector：
+
+```qi
+导入 Harness.追踪::{设置OTLP, 设置服务名, 导出树到OTLP};
+导入 Harness.跨度::{跨度树JSON};
+设置OTLP("http://localhost:4318");
+导出树到OTLP(跨度树JSON(""));    // 整棵树一次 POST，带 parentSpanId，默认异步
+```
+
+注意：`开始跨度` / `结束跨度` 那套手写 span API 仍在，但**代理主循环不调它**，
+只有 `报告.qi` 用。要链路图请用 `跨度` 模块，不要自己手写 span。
 
 ## 重试
 

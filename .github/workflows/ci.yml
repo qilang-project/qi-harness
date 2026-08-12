@@ -15,7 +15,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  QI_WEB_REF: 120576d4c53888535e1ef617510fc3d340d2e640
+  # ⚠ 用到 qi-web 的**新 API** 时必须一起 bump 这个钉子。
+  # 钉住是对的（CI 要可复现），但漏 bump 是**静默**的：本地跑得好好的，
+  # CI 上报 `导入的符号「X」不存在` —— 因为那边 checkout 的是老版本。
+  # 观测指标.qi 用 Web.指标 时踩过一次：钉的 120576d 早于整个指标模块。
+  QI_WEB_REF: cf0593ebf51a082f179493af98d9ac942763503a
   QI_SOURCE_REF: 05568a72a92698502fe006bd3223536e9cb04887
   QI_RUNTIME_SOURCE_REF: ceada461d2aca568b2b3788f3b310fcc07748423
   QI_GUI_SOURCE_REF: 825802276688a528fcad53f831a92f8e35f89963
