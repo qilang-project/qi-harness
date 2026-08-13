@@ -69,7 +69,43 @@ def get(url: str, timeout: float = 5.0) -> tuple[int, str]:
         return e.code, e.read().decode("utf-8", "replace")
 
 
+def 工具链能编Web() -> tuple[bool, str]:
+    """看板依赖 qi-web，而 qi-web 用到了**模块限定的类型标注**（`变量 x: 查.参数集`）。
+
+    这个语法 2026.07.24-1 的编译器不认，报「意外的标记 `.`」。而 qi-web 的
+    指标模块（2026-08-07）比那个语法（2026-07-29）晚 —— 也就是说
+    **不存在既有指标注册表、又能被旧编译器编过的 qi-web 版本**。
+
+    所以这里探一下：编不过就跳过看板套件，并把原因和门槛说清楚。
+    这条**只跳看板**，跨度树 / 并发 / OTLP / 端到端 四条照跑不误 —— 它们不依赖 qi-web。
+    """
+    with tempfile.TemporaryDirectory(prefix="qi-web-probe-") as tmp:
+        probe = Path(tmp) / "probe.qi"
+        probe.write_text(
+            "包 主程序;\n导入 Web.指标::{挂指标};\n函数 入口() { }\n", encoding="utf-8"
+        )
+        env = os.environ.copy()
+        if RUNTIME:
+            env["QI_RUNTIME_LIB"] = RUNTIME
+        done = subprocess.run(
+            [QI, "check", str(probe)], cwd=CWD, env=env, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120,
+        )
+        return done.returncode == 0, done.stdout
+
+
 def main() -> int:
+    可以, 详情 = 工具链能编Web()
+    if not 可以:
+        print("SKIP 观测台套件：当前工具链编不了 qi-web。")
+        print("  看板（观测台.qi / 观测指标.qi）依赖 qi-web 的 Prometheus 注册表，")
+        print("  而 qi-web 用了模块限定的类型标注，需要 qi ≥ 2026.08.12-1。")
+        print("  跨度树 / 并发采集 / OTLP / 端到端 四条不依赖 qi-web，照常运行。")
+        print("  探针输出：")
+        for 行 in 详情.splitlines()[:4]:
+            print(f"    {行[:160]}")
+        return 0
+
     with tempfile.TemporaryDirectory(prefix="qi-obs-ui-") as tmp:
         tmp_path = Path(tmp)
         port_file = tmp_path / "port"

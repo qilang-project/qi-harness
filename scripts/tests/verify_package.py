@@ -95,7 +95,7 @@ def main() -> int:
         fail(f"packaged qi.toml does not contain {version_line}")
     if not re.search(r'^最低Qi版本 = "2026.07.24-1"$', manifest, re.MULTILINE):
         fail("packaged qi.toml does not require the governed Qi release")
-    if "qi@05568a72 + qi-runtime@ceada461 + qi-gui@82580227" not in manifest:
+    if "qi@d5274029 + qi-runtime@cba00fba + qi-gui@82580227" not in manifest:
         fail("packaged qi.toml does not declare the governed Qi source baseline")
     print(f"verified {len(tar_tree)} packaged files")
     return 0

@@ -210,8 +210,8 @@ class QiSourcePolicyTests(unittest.TestCase):
     def test_workflows_pin_explicit_source_commits(self) -> None:
         for name in ("ci.yml", "release.yml"):
             text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-            self.assertIn("05568a72a92698502fe006bd3223536e9cb04887", text)
-            self.assertIn("ceada461d2aca568b2b3788f3b310fcc07748423", text)
+            self.assertIn("d527402942cb5a6eaae07be8040afd35e1cc58e8", text)
+            self.assertIn("cba00fbacf9a70bc646c283e1352ecbe68197127", text)
 
     def test_source_ref_validation_accepts_the_pinned_shas(self) -> None:
         """install-qi-source.sh 的 SHA 校验必须真的放行我们钉的那些 SHA。

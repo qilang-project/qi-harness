@@ -10,4 +10,4 @@
 描述 = "qi-harness — LLM agent 框架，基于 Martin Fowler harness engineering 模式"
 作者 = "Qi Language Team"
 最低Qi版本 = "2026.07.24-1"
-Qi源码基线 = "qi@05568a72 + qi-runtime@ceada461 + qi-gui@82580227"
+Qi源码基线 = "qi@d5274029 + qi-runtime@cba00fba + qi-gui@82580227"

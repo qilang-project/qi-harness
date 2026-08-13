@@ -21,6 +21,10 @@ All notable changes to qi-harness are recorded here. The project follows semanti
 
 ### Fixed
 
+- **`检索.按来源删块` 返回的不是行数是指针值**：`数据库.执行参数` 返回 JSON 字符串
+  `{"成功":1,"影响行数":N}`，之前直接当整数返回 —— 调用方拿到的「删掉的行数」永远是
+  个大得离谱的非零数。qi 编译器把注册表 ptr 返回映射为字符串后（2026-08-12）由类型
+  检查抓出。现解析 `影响行数`。
 - **OTLP 导出丢失整棵树的父子关系**：`导出OTLP跨度` 从未写过 `parentSpanId`
   （父跨度只在 `开始跨度` 那行 JSON 里出现过，结束时无处可取），推送到 Jaeger 是
   一堆孤儿 span。span 登记表现在记录父跨度。
@@ -37,6 +41,11 @@ All notable changes to qi-harness are recorded here. The project follows semanti
 
 - `Harness.qi` 新增 re-export `跨度`。`观测台` / `观测指标` 依赖 qi-web，**故意不**
   re-export，避免不需要看板的程序被迫解析 Web 包。
+- CI 与 release 工作流的 `QI_SOURCE_REF` / `QI_RUNTIME_SOURCE_REF` 上调至
+  2026.08.12-1（`d527402` / `cba00fb`）：钉住的 2026.07.24-1 编译器不认 qi-web 的
+  模块限定类型标注（`变量 x: 查.参数集`），而 qi-web 的指标模块（观测台依赖）比该
+  语法更晚出现 —— 不存在两全的旧组合。观测台测试新增工具链预检，旧工具链下明说
+  原因并跳过（其余可观测性套件照跑）。
 - CI 与 release 工作流的 `QI_WEB_REF` 上调至 `cf0593e`：原先钉的 `120576d` 早于
   qi-web 指标模块，`观测指标.qi` 在 CI 上会报「导入的符号不存在」。
 
