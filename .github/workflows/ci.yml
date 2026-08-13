@@ -20,6 +20,7 @@ env:
   # CI 上报 `导入的符号「X」不存在` —— 因为那边 checkout 的是老版本。
   # 观测指标.qi 用 Web.指标 时踩过一次：钉的 120576d 早于整个指标模块。
   QI_WEB_REF: cf0593ebf51a082f179493af98d9ac942763503a
+  QI_CLI_REF: 903ecd28eb97967d856eb88867046388f9d04cbb
   QI_SOURCE_REF: d527402942cb5a6eaae07be8040afd35e1cc58e8
   QI_RUNTIME_SOURCE_REF: cba00fbacf9a70bc646c283e1352ecbe68197127
   QI_GUI_SOURCE_REF: 825802276688a528fcad53f831a92f8e35f89963
@@ -81,6 +82,11 @@ jobs:
           ln -s "$GITHUB_WORKSPACE" "$packages/Harness"
           git clone --quiet https://github.com/qilang-project/qi-web.git "$packages/Web"
           git -C "$packages/Web" checkout --quiet "$QI_WEB_REF"
+          # qi-cli：cmd/qi-harness.qi（开发者 CLI）要导 CLI 包。这一步以前一直
+          # 缺着 —— CI 从没跑到过 CLI native（都死在更早的套件上），钉新工具链
+          # 后前面全绿了才第一次撞见「无法找到导入模块: CLI」。
+          git clone --quiet https://github.com/qilang-project/qi-cli.git "$packages/CLI"
+          git -C "$packages/CLI" checkout --quiet "$QI_CLI_REF"
           echo "QI_PACKAGES_PATH=$packages" >> "$GITHUB_ENV"
 
       - name: Verify toolchain
