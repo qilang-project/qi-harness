@@ -33,10 +33,20 @@ def compile_service_fixture(workspace: Path, output: Path) -> None:
     packages.mkdir()
     (packages / "Harness").symlink_to(ROOT, target_is_directory=True)
     env = os.environ.copy()
+    # 编译器把 QI_PACKAGES_PATH 当**单个目录**，不认 os.pathsep 拼接的列表 ——
+    # 拼出来的 "a:b" 会被当成一个目录名，所有包全 miss。本地看不出来
+    # （monorepo 的祖先扫描兜底找到了 Web），CI 独立 checkout 才炸。
+    # 所以把现有路径里的包符号链接进自建目录，保持单一路径。
     existing_packages = env.get("QI_PACKAGES_PATH")
-    env["QI_PACKAGES_PATH"] = str(packages) + (
-        os.pathsep + existing_packages if existing_packages else ""
-    )
+    if existing_packages:
+        existing_root = Path(existing_packages)
+        if existing_root.is_dir():
+            for entry in existing_root.iterdir():
+                if entry.name != "Harness" and not entry.name.startswith("."):
+                    (packages / entry.name).symlink_to(
+                        entry.resolve(), target_is_directory=True
+                    )
+    env["QI_PACKAGES_PATH"] = str(packages)
     command = [QI]
     optimization = os.environ.get("QI_TEST_OPTIMIZATION")
     if optimization:
