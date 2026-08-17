@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,21 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_DIR = Path(__file__).resolve().parent
+
+
+def default_max_tokens() -> int:
+    """从 模型.qi 读默认 最大令牌，不在这儿抄一份。
+
+    这个断言检查的是「取消请求预算之后，回到会话的默认信封」—— 所以它必须
+    等于默认值本身。以前是写死的 2048，默认值一改（2048 → 8192）CI 就红，
+    而红的地方离改动隔着一个仓，看错误信息完全不知道是怎么回事。
+    读源比抄值可靠：默认值再变，这里自动跟上。
+    """
+    text = (ROOT / "模型.qi").read_text(encoding="utf-8")
+    match = re.search(r"最大令牌:\s*(\d+)", text)
+    if not match:
+        raise RuntimeError("模型.qi 里找不到 最大令牌 的默认值")
+    return int(match.group(1))
 
 
 def wait_for_file(path: Path, process: subprocess.Popen[str]) -> None:
@@ -104,7 +120,7 @@ def main() -> int:
                 "retry_success": [1, 1],
                 "retry_exhausted": [1, 1, 1],
                 "overrun": [1],
-                "policy": [1, 1, 1, 2048],
+                "policy": [1, 1, 1, default_max_tokens()],
             }
             for route, values in expected_max_tokens.items():
                 if state["max_tokens"][route] != values:
