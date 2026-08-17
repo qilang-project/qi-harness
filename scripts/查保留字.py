@@ -20,7 +20,12 @@ DECL = [
     re.compile(r'(?:变量|常量)\s+([一-鿿\w]+)\s*[:：=]'),
     re.compile(r'函数\s+([一-鿿\w]+)\s*\('),
 ]
-PARAM = re.compile(r'函数\s+[一-鿿\w]+\s*\(([^)]*)\)')
+# 形参表可以再套一层括号：函数类型参数 `比较: 函数(指针, 指针): 整数`
+# （`外部` 块声明 C 回调槽就长这样）。只吃到第一个 `)` 会把内层的**类型名**
+# 当成形参名，`指针`/`整数` 立刻被误报成保留字。所以允许一层嵌套括号，
+# 再把内层的 函数(...) 整段抹掉——那里面是类型，不是名字。
+PARAM = re.compile(r'函数\s+[一-鿿\w]+\s*\(((?:[^()]|\([^()]*\))*)\)')
+FNTYPE = re.compile(r'函数\s*\([^()]*\)')
 
 def scan(path, words):
     bad = []
@@ -31,7 +36,7 @@ def scan(path, words):
                 if name in words:
                     bad.append((lineno, name, "声明"))
         for group in PARAM.findall(code):
-            for part in group.split(","):
+            for part in FNTYPE.sub("", group).split(","):
                 name = part.split(":")[0].strip()
                 if name in words:
                     bad.append((lineno, name, "参数"))
