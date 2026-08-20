@@ -137,8 +137,16 @@
 // 注意这是 **Gemini 系的写法**。百炼要 `{"enable_search": true}`，走
 // 配置额外参数 自己写。没做成「自动按 provider 分派」是因为那要在这儿
 // 维护一张各家搜索字段的对照表，而它每隔几个月就变一次。
+// tool_config 那半截不是可选的：**内置搜索和自定义函数工具同时存在时**，
+// Gemini 会直接 400 —— "Please enable
+// tool_config.include_server_side_tool_invocations to use Built-in tools
+// with Function calling."。只搜不带工具时不加也能跑，但那样这个函数就分
+// 两种用法了，不如一律带上。
 公开 函数 开启联网搜索(配置: 模型配置) : 模型配置 {
-    返回 配置额外参数(配置, `{"tools": [{"google_search": {}}]}`);
+    返回 配置额外参数(配置, `{
+        "tools": [{"google_search": {}}],
+        "tool_config": {"include_server_side_tool_invocations": true}
+    }`);
 }
 
 // ===== 会话生命周期 =====
