@@ -91,6 +91,38 @@ class ApiDiffTests(unittest.TestCase):
                     20,
                 )
 
+    # ── 结构体加字段：兼容，其余改法一律仍算破坏 ────────────────────
+    #
+    # 本仓的公开结构体只由自己的 builder 构造（大模型()/默认配置()+配置端点() 链式改），
+    # 全仓无一处用户侧 `新建 X { … }`，所以多个字段调用方一行不用改。
+    # 不这么分类的话，一条老声明消失+一条新声明出现 = 判定「有删除」= 破坏，
+    # 给结构体加字段就永远过不了门禁（模型配置 加 额外参数 后 CI 红了四天）。
+    def test_struct_field_addition_is_additive(self) -> None:
+        before = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, }\n"
+        after = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n"
+        result = self.classify(before, after)
+        self.assertEqual(result.returncode, 10, result.stdout)
+        self.assertIn("新增字段 丙", result.stdout)
+
+    def test_struct_field_removal_rename_retype_are_still_breaking(self) -> None:
+        before = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, }\n"
+        for 名, after in (
+            ("删字段", "[Harness]\n类型 配置 { 甲: 字符串, }\n"),
+            ("改名", "[Harness]\n类型 配置 { 甲: 字符串, 丙: 整数, }\n"),
+            ("改类型", "[Harness]\n类型 配置 { 甲: 字符串, 乙: 字符串, }\n"),
+            ("换结构体名", "[Harness]\n类型 别的 { 甲: 字符串, 乙: 整数, }\n"),
+        ):
+            with self.subTest(名=名):
+                self.assertEqual(self.classify(before, after).returncode, 20)
+
+    def test_struct_field_addition_plus_removal_is_breaking(self) -> None:
+        # 同时加一个删一个：删除那条不许被「加字段」这条规则吃掉
+        before = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, }\n"
+        after = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n函数 alpha()\n"
+        self.assertEqual(self.classify(before + "函数 alpha()\n", after).returncode, 10)
+        少了函数 = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n"
+        self.assertEqual(self.classify(before + "函数 alpha()\n", 少了函数).returncode, 20)
+
 
 class HistoricalApiBaselineTests(unittest.TestCase):
     def test_historical_baseline_is_generated_from_pinned_tag_and_digest(self) -> None:

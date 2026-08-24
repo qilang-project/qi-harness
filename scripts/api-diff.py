@@ -55,6 +55,73 @@ def generated_manifest() -> str:
     return module.render_manifest()
 
 
+TYPE_RE = re.compile(r"^类型\s+(\S+)\s*\{(.*)\}\s*$")
+
+
+def parse_type_decl(line: str) -> tuple[str, dict[str, str]] | None:
+    """`类型 名 { 字段: 类型, … }` → (名, {字段: 类型})。不是类型声明返回 None。"""
+    match = TYPE_RE.match(line)
+    if match is None:
+        return None
+    name = match.group(1)
+    fields: dict[str, str] = {}
+    for part in match.group(2).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        field, _, field_type = part.partition(":")
+        fields[field.strip()] = field_type.strip()
+    return name, fields
+
+
+def struct_only_gained_fields(before_line: str, after_line: str) -> bool:
+    """两条类型声明之间，是不是「只多了字段、老字段一个没动」。
+
+    加字段为什么算兼容：本仓的公开结构体都是**只由自己的 builder 构造**的
+    （`大模型()` / `默认配置()` + `配置端点()` 这类链式改法），全仓和所有示例里
+    没有一处用户侧的 `新建 模型配置 { … }`。所以多一个字段，调用方一行都不用改。
+
+    反过来，删字段 / 改名 / 改类型 仍然算破坏 —— 那些是真的会让调用方编不过。
+    """
+    before = parse_type_decl(before_line)
+    after = parse_type_decl(after_line)
+    if before is None or after is None:
+        return False
+    if before[0] != after[0]:
+        return False
+    old_fields, new_fields = before[1], after[1]
+    for field, field_type in old_fields.items():
+        if new_fields.get(field) != field_type:
+            return False
+    return len(new_fields) > len(old_fields)
+
+
+def 分出加字段(before: set[str], after: set[str]) -> tuple[set[str], set[str], list[str]]:
+    """把「同名结构体只加了字段」这一对从 删除/新增 里摘出来，单独当兼容变更报。
+
+    不摘的话：一条老声明消失 + 一条新声明出现 = 差分器判定「有删除」= 破坏，
+    于是给结构体加个字段就永远过不了门禁。qi-harness 的 模型配置 加
+    `额外参数` 之后 CI 从 2026-08-20 起一直红，就是卡在这儿。
+    """
+    removed = before - after
+    added = after - before
+    配对: list[str] = []
+    for old_line in sorted(removed):
+        old = parse_type_decl(old_line)
+        if old is None:
+            continue
+        for new_line in sorted(added):
+            if struct_only_gained_fields(old_line, new_line):
+                新字段 = sorted(
+                    set(parse_type_decl(new_line)[1]) - set(old[1])
+                )
+                配对.append(f"类型 {old[0]} 新增字段 {', '.join(新字段)}（老字段未变，兼容）")
+                removed = removed - {old_line}
+                added = added - {new_line}
+                break
+    return removed, added, 配对
+
+
 def parse_version(value: str) -> tuple[int, int, int]:
     match = SEMVER_RE.fullmatch(value)
     if match is None:
@@ -97,8 +164,10 @@ def main() -> int:
     for section in sorted(set(baseline) | set(candidate)):
         before = baseline.get(section, set())
         after = candidate.get(section, set())
-        additions.extend(f"[{section}] + {item}" for item in sorted(after - before))
-        removals.extend(f"[{section}] - {item}" for item in sorted(before - after))
+        剩余删除, 剩余新增, 加字段 = 分出加字段(before, after)
+        additions.extend(f"[{section}] ~ {item}" for item in 加字段)
+        additions.extend(f"[{section}] + {item}" for item in sorted(剩余新增))
+        removals.extend(f"[{section}] - {item}" for item in sorted(剩余删除))
 
     if removals:
         print("breaking public API drift")
