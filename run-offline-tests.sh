@@ -122,6 +122,9 @@ run_suite "budget example" tests/run-qi-test.sh examples/预算_测.qi
 run_suite "context window example" tests/run-qi-test.sh examples/上下文_滑窗测.qi
 run_suite "evaluation example" tests/run-qi-test.sh examples/评估_打分测.qi
 
+run_suite "cron schedule" tests/run-qi-test.sh tests/scheduler/排期_测.qi
+run_suite "resident worker" tests/run-qi-test.sh tests/scheduler/常驻工_测.qi
+
 run_suite "event bus" tests/run-qi-test.sh tests/events/lifecycle_event_test.qi
 run_suite "Agent lifecycle" tests/events/run-agent-lifecycle.sh
 run_clean_path_suite "event adapters" /tmp/qi_event_adapter_trace.jsonl \
