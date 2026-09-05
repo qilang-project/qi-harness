@@ -113,8 +113,10 @@ run_suite "All example syntax" ./check-examples.py
 
 run_suite "Harness syntax" qi check Harness.qi
 run_suite "MCP service syntax" qi check MCP服务.qi
+run_suite "MCP equip syntax" qi check MCP装备.qi
 run_suite "Agent service syntax" qi check 代理服务.qi
 run_suite "MCP service example syntax" qi check examples/MCP服务示例.qi
+run_suite "MCP HTTP round-trip example syntax" qi check examples/MCP服务HTTP_往返测.qi
 run_suite "Agent service example syntax" qi check examples/代理服务示例.qi
 
 run_suite "retry resource isolation" tests/run-qi-test.sh examples/重试_熔断测.qi
@@ -142,6 +144,12 @@ run_suite "observability end-to-end" python3 tests/observability/跑端到端.py
 # 看板要 qi-web（观测台/观测指标 依赖它，故意不从 Harness.qi re-export）
 run_suite "observability dashboard" python3 tests/observability/跑观测台测.py
 run_suite "tool pipeline" tests/run-qi-test.sh tests/tool_pipeline/工具管线_测.qi
+# 技能：frontmatter 解析修正 + 技能库渐进式披露（load_skill / read_skill_file）
+run_suite "skills" tests/run-qi-test.sh tests/skills/技能_测.qi
+# MCP 资源/提示进代理：对着 tests/mcp_equip/fake_mcp_server.py（python3 stdio）跑
+run_suite "MCP resources/prompts equip" tests/run-qi-test.sh tests/mcp_equip/MCP装备_测.qi
+# MCP服务 Streamable HTTP：同进程 goroutine 起 server，MCP客户端 + 裸 TCP 核对协议
+run_suite "MCP HTTP transport" tests/run-qi-test.sh tests/mcp_transport/MCP服务HTTP_测.qi
 run_suite "tool scheduling" tests/tool_scheduling/run.sh
 run_discovered_test "run configuration" \
     tests/run_config/run.sh tests/run_config/run.py tests/run_config/run_config_test.qi

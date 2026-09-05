@@ -11,7 +11,7 @@ qi-harness `0.2.x` requires Qi `2026.07.24-1` or newer. That release provides th
 ```
 qi-harness/
 ├── qi.toml            # 包配置
-├── Harness.qi         # 主入口（仅 re-export 模型/对话/工具/代理/追踪/事件/重试/技能/MCP客户端/运行上下文/工具上下文/会话存储）
+├── Harness.qi         # 主入口（仅 re-export 模型/对话/工具/代理/追踪/事件/重试/技能/MCP客户端/MCP装备/运行上下文/工具上下文/会话存储）
 ├── 模型.qi             # provider 抽象（OpenAI/Anthropic/DeepSeek/Moonshot/智谱/本地）+ 配置 builder
 ├── 对话.qi             # 助手消息 + 工具调用解析
 ├── 工具.qi             # Tool 定义 + 注册表 + 派发
@@ -506,6 +506,68 @@ harness 不内置裸文件 tool（fs 无沙箱 = agent 拿到进程全部权限�
 LLM 实跑演示：`QI_LLM_KEY=sk-... qi run examples/文件助手.qi`
 
 > ⚠️ 工具内部只做路径围栏，不做内容审查；给 agent 文件权限前自己评估根目录选址（别把 `/` 或家目录当沙箱根）。
+
+## 技能库（agentskills.io，渐进式披露）
+
+`SKILL.md`（YAML frontmatter `name` / `description` / 可选 `allowed-tools` + Markdown 正文）按
+[agentskills.io](https://agentskills.io/specification) 规范加载。老接口 `装备技能` / `装备技能目录`
+把正文整段塞进系统提示，技能一多就爆；`装备技能库` 只把 **name + description 清单**放进系统提示，
+正文由模型按需取：
+
+```qi
+导入 Harness::{ 装备技能库, 技能库清单, 应用技能工具白名单 };
+
+代理值 = 装备技能库(代理值, "/Users/x/.agents/skills");   // 会话已开也行；保留原系统提示
+代理值 = 装备技能库(代理值, "./项目技能");                 // 多个根目录叠加；重名后者覆盖 + stderr 警告
+IO.打印行(技能库清单(代理值));                              // 看看注入了什么清单
+```
+
+装备后代理多出两个本地工具（名字对模型暴露用 ASCII）：
+
+| 工具 | 参数 | 行为 |
+|---|---|---|
+| `load_skill` | `{"name"}` | 返回该技能正文 + 技能目录内资源文件清单（`scripts/` `references/` `assets/`…）+ `allowed-tools` 建议；同一技能第二次只回「已加载过」短句 |
+| `read_skill_file` | `{"name","path"}` | 只读该技能目录内的相对路径；拒绝绝对路径 / `~` / `..`；超 256KB 截断并注明 |
+
+`allowed-tools` 解析进 `技能.允许工具`（`技能允许的工具(技能值)`），`load_skill` 的返回会告诉模型
+「本技能建议只用这些工具」。要**强制**收窄，宿主显式调 `应用技能工具白名单(代理值, 技能名)`（接到
+已有的 `设置工具白名单` 上；放开用 `设置工具白名单(代理值, "")`）—— 代理循环里没有「本轮结束」的
+挂点可以自动恢复，所以不做隐式按轮收窄。
+
+frontmatter 解析只认首个 `---` … `---` 块、按行 `^键:` 精确匹配，值去成对引号，支持 `description: >` / `|`
+折叠多行。fixture 在 `examples/技能/技能库/`，断言在 `tests/skills/技能_测.qi`。
+
+## MCP：资源 / 提示进代理 + Streamable HTTP 服务端
+
+`装备MCP` 只搬工具。资源和提示也做成代理的工具，模型自然会调：
+
+```qi
+导入 Harness::{ 连接MCP_stdio, 装备MCP全部 };   // 或分开：装备MCP资源 / 装备MCP提示
+
+变量 描述符 = 连接MCP_stdio("npx", "[\"-y\",\"@modelcontextprotocol/server-everything\"]");
+代理值 = 装备MCP全部(代理值, 描述符);   // = 装备MCP + 装备MCP资源 + 装备MCP提示
+```
+
+| 工具 | 来源 |
+|---|---|
+| `mcp_list_resources` / `mcp_read_resource {uri}` | resources/list · resources/read |
+| `prompt_<name>`（每个 prompt 一个；参数 = 它声明的 arguments） | prompts/get，messages 拼成文本回给模型 |
+
+多台 server 时后来者的工具名带 `_2` / `_3` 后缀，prompt 名做 ASCII 安全化（`总结 文档` → `prompt______`）。
+
+**把自己变成 HTTP MCP server**（MCP 2025-03-26 Streamable HTTP，不依赖 qi-web）：
+
+```qi
+导入 Harness.MCP服务::{ MCP服务, 创建MCP服务, 服务注册工具, 运行MCP服务_HTTP };
+变量 服务: MCP服务 = 创建MCP服务("我的服务", "1.0.0");
+服务 = 服务注册工具(服务, 工具值);
+运行MCP服务_HTTP(服务, "127.0.0.1", 41963);   // 阻塞；客户端连 http://127.0.0.1:41963/mcp
+```
+
+`POST /mcp` 收 JSON-RPC 回 `application/json`；`initialize` 签发 `Mcp-Session-Id`，之后逐请求校验
+（缺头 400、未知/已结束 404）；通知 202；`DELETE /mcp` 结束会话；`GET /mcp` 405（本 server 没有
+服务端→客户端通知，不开 SSE 流）。往返示例 `examples/MCP服务HTTP_往返测.qi`，协议断言
+`tests/mcp_transport/MCP服务HTTP_测.qi`。详见 [MCP.md](MCP.md)。
 
 ## Provider 支持
 

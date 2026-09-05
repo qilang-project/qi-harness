@@ -6,6 +6,32 @@ All notable changes to qi-harness are recorded here. The project follows semanti
 
 ### Added
 
+- **技能库渐进式披露**：`装备技能库(代理值, 目录)`。系统提示只放 name + description 清单
+  （保留原系统提示，多次调用叠加多个根目录、重名后者覆盖并在 stderr 警告），给代理注册
+  两个本地工具 `load_skill {"name"}`（返回正文 + 技能目录内 `scripts/` `references/`
+  `assets/` 等资源文件清单 + allowed-tools 建议；同一技能第二次只回「已加载过」）与
+  `read_skill_file {"name","path"}`（只读技能目录内相对路径，拒绝绝对路径 / `~` / `..`，
+  超 256KB 截断并注明）。每个代理一个槽位（上限 8），与 `文件工具` 同一套 before-hook
+  注入办法。附 `技能库清单` / `技能库已加载` / `应用技能工具白名单`（按技能 allowed-tools
+  收窄 `设置工具白名单`，宿主显式调）。老的 `装备技能` / `装备技能目录` / `注入技能清单`
+  原样保留。
+- `技能.允许工具` 字段 + `技能允许的工具(技能值)`：解析 frontmatter `allowed-tools`
+  （空格 / 逗号分隔，规整成逗号分隔）。
+- **MCP 资源 / 提示进代理**（新模块 `MCP装备.qi`，已从 `Harness.qi` 再导出）：
+  `装备MCP资源` 注册 `mcp_list_resources` / `mcp_read_resource {uri}`；`装备MCP提示` 把
+  prompts/list 的每个 prompt 注册成 `prompt_<name>`（ASCII 安全化，参数 = 声明的
+  arguments，只透传声明过的参数），调用时 prompts/get 的 messages 拼成文本；
+  `装备MCP全部` = 三件一起。多台 server 工具名撞了加 `_2` / `_3` 后缀。
+- **MCP服务 Streamable HTTP 传输**：`运行MCP服务_HTTP(服务, 主机, 端口)`。`POST /mcp`
+  收 JSON-RPC 回 `application/json`；`initialize` 签发 `Mcp-Session-Id` 之后逐请求校验
+  （缺头 400、未知/已结束 404）；通知 202；`DELETE /mcp` 结束会话；`GET /mcp` 405；
+  `OPTIONS` 204。用 `标准库.网络` 裸 TCP 实现（每连接一个 goroutine，keep-alive），
+  不依赖 qi-web，也没走 Rust 的 `qi_mcp_serve_http`（那条把所有响应包成 SSE、不校验会话、
+  DELETE 回 405）。
+- `tests/skills/`、`tests/mcp_equip/`（含 `fake_mcp_server.py` 假 stdio server）、
+  `tests/mcp_transport/` 三组离线断言，`examples/MCP服务HTTP_往返测.qi` 往返示例，
+  `examples/技能/技能库/` 技能库 fixture；都已接进 `run-offline-tests.sh`。
+
 - `常驻工.qi`：让 agent 主动开口。定时/cron 巡检 + 去重节流出口 + 事件桥。
   三层各管各的：常驻工管什么时候醒、出口管说不说/说给谁、接收者管怎么送出去
   （qi-web 广播 / Redis / webhook 由调用方写）。重心在出口那层的**指纹去重 +
@@ -31,6 +57,12 @@ All notable changes to qi-harness are recorded here. The project follows semanti
   字节的 OTLP 测、真跑 agent 的端到端测、抓 HTML 与 `/metrics` 的看板测。
 
 ### Fixed
+
+- **`解析技能` 的 frontmatter 是全文子串查找**：`name:` 会撞到 description 里出现的
+  「name:」字样，也不限定在首个 `---` 块内（正文里再出现 `---` + `name:` 也会被吃）。
+  改成只认首个 `---` … `---` 块、按行 `^键:` 精确匹配（`username:` 不算 `name:`），
+  值去成对引号，支持 `description: >` / `|` 折叠多行，CRLF 也认；没有 frontmatter 的
+  文件名称为空、全文作正文。用例见 `tests/skills/技能_测.qi`。
 
 - **给公开结构体加字段不再被门禁判成破坏性变更**。`api-diff.py` 逐行比对声明文本，
   结构体多一个字段 = 老声明消失 + 新声明出现 = 「有删除」= breaking，于是

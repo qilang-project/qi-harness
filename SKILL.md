@@ -122,35 +122,33 @@ IO.打印行(预算报告(预算));
 
 ## 技能（agentskills.io）
 
-qi-harness 支持 [agentskills.io](https://agentskills.io/specification) 规范的 Skill：加载 `SKILL.md`（YAML frontmatter 含 `name`/`description` + Markdown 正文），装备到 agent 后注入系统提示，指导模型完成对应任务。
+qi-harness 支持 [agentskills.io](https://agentskills.io/specification) 规范的 Skill：`SKILL.md` = YAML frontmatter（`name` / `description` / 可选 `allowed-tools`）+ Markdown 正文，技能目录可带 `scripts/` `references/` `assets/`。
+
+**推荐：`装备技能库`（渐进式披露）** —— 系统提示只放 name + description 清单，正文模型按需取：
 
 ```qi
-导入 Harness::{ 技能, 加载技能文件, 装备技能, 大模型, 开启会话, 创建代理, 简单问 };
+导入 Harness::{ 装备技能库, 技能库清单, 技能库已加载, 应用技能工具白名单 };
+
+代理值 = 装备技能库(代理值, "/Users/x/.agents/skills");   // 会话已开也行，保留原系统提示
+代理值 = 装备技能库(代理值, "./项目技能");                 // 可叠加多个根目录；重名后者覆盖 + stderr 警告
+```
+
+装备后代理多两个本地工具（ASCII 名）：`load_skill {"name"}` 返回正文 + 技能目录内资源文件清单 + allowed-tools 建议，同一技能第二次只回「已加载过」；`read_skill_file {"name","path"}` 只读技能目录内相对路径，拒绝绝对路径 / `~` / `..`，超 256KB 截断并注明。
+`应用技能工具白名单(代理值, 技能名)` 按该技能的 allowed-tools 收窄 `设置工具白名单`（宿主显式调，不自动按轮收窄）。检视：`技能库清单(代理值)` / `技能库已加载(代理值, 名)`。
+
+**老接口（整段正文注入配置，开会话前）**仍可用，行为不变：
+
+```qi
+导入 Harness::{ 技能, 加载技能文件, 装备技能, 装备技能目录, 技能目录清单 };
 
 变量 技能值: 技能 = 加载技能文件("技能/海盗腔.md");   // 解析 frontmatter + 正文
-变量 配置 = 大模型("https://api.deepseek.com", 密钥, "deepseek-chat");
 配置 = 装备技能(配置, "你是一个助手。", 技能值);          // ⚠️ 必须在 开启会话 之前
-变量 会话 = 开启会话(配置);
-变量 代理值 = 创建代理("助手", 会话);
-IO.打印行(简单问(代理值, "..."));                       // 行为受技能影响
+配置 = 装备技能目录(配置, "你是助手。", "/Users/x/.agents/skills");   // 整库全部注入
 ```
 
-API：`解析技能(原始文本)` / `加载技能文件(路径)` / `技能摘要(技能)` / `装备技能(配置, 基础提示, 技能)` / `注入技能清单(配置, 基础提示, 清单)`。
-`技能` 结构体字段：`名称` / `描述` / `正文`。
-
-**批量装备整个技能库目录**（扫 `<目录>/<名>/SKILL.md`，全部加载注入；也适用于 bundle 目录）：
-
-```qi
-导入 Harness::{ 装备技能目录, 技能目录清单 };
-
-// 一次装备一个 skills 库（兼容 ~/.agents/skills 这类 agentskills.io 目录）
-配置 = 装备技能目录(配置, "你是助手。", "/Users/x/.agents/skills");
-
-// 或先看看目录里有哪些技能（返回摘要清单）
-IO.打印行(技能目录清单("/Users/x/.agents/skills"));
-```
-
-> ⚠️ `装备技能` 作用于**配置**（开会话前），不是会话——奇语的会话 system 提示在 `开启会话` 时随配置注入。
+API：`解析技能(原始文本)` / `加载技能文件(路径)` / `技能摘要(技能)` / `技能允许的工具(技能)` / `装备技能(配置, 基础提示, 技能)` / `注入技能清单(配置, 基础提示, 清单)` / `装备技能目录` / `技能目录清单`。
+`技能` 结构体字段：`名称` / `描述` / `正文` / `允许工具`（逗号分隔）。
+frontmatter 只认首个 `---` … `---` 块、按行 `^键:` 精确匹配（description 里出现 `name:` 不会串）、值去成对引号、支持 `description: >` / `|` 折叠多行；没有 frontmatter 的文件名称为空。
 
 ## MCP 客户端（连外部 server）
 
@@ -164,6 +162,8 @@ qi-harness **内置 MCP 客户端**（stdio + Streamable HTTP），把外部 MCP
 变量 回复 = 运行(代理值, "...");                          // 模型调工具时自动转发到 MCP
 关闭MCP(描述符);
 ```
+
+**资源 / 提示也进代理**：`装备MCP全部(代理值, 描述符)` = `装备MCP` + `装备MCP资源`（工具 `mcp_list_resources` / `mcp_read_resource {uri}`）+ `装备MCP提示`（每个 prompt 一个工具 `prompt_<name>`，参数 = 它声明的 arguments，调用时 prompts/get 的 messages 拼成文本）。多台 server 工具名带 `_2` 后缀。
 
 出站：`MCP列出工具`/`MCP调用工具`/`MCP列出资源`/`MCP读取资源`/`MCP列出提示`/`MCP获取提示`/`MCP补全`。入站（双向，仅 stdio）：`设置采样处理`/`设置询问处理`/`设置根目录`/`取通知`（处理器签名 `函数(字符串):字符串`）。**agent 循环优先用 stdio**（HTTP 会话绑 TCP 连接，LLM 间隙可能超时断开；HTTP host 须 `localhost`）。完整 API + 一致性矩阵见 [MCP.md](MCP.md)。
 
@@ -464,11 +464,16 @@ HTTP 持久会话、文件沙箱/报告/检索隔离和 M1 reliability。GitHub 
 同一批 `工具` 值，一头接 agent loop，一头接 MCP 的 `tools/list` + `tools/call`：
 
 ```qi
-导入 Harness.MCP服务::{MCP服务, 创建MCP服务, 服务注册工具, 运行MCP服务, 关闭MCP服务};
+导入 Harness.MCP服务::{MCP服务, 创建MCP服务, 服务注册工具, 运行MCP服务, 运行MCP服务_HTTP, 关闭MCP服务};
 变量 服务: MCP服务 = 创建MCP服务("我的服务", "0.1.0");
 对于 i 在 0 直到 长度(工具集) { 服务 = 服务注册工具(服务, 工具集[i]); }
-运行MCP服务(服务);      // 阻塞：stdio JSON-RPC 2.0，直到 stdin EOF
+运行MCP服务(服务);                            // 阻塞：stdio JSON-RPC 2.0，直到 stdin EOF
+// 或 Streamable HTTP（MCP 2025-03-26；不依赖 qi-web）：
+运行MCP服务_HTTP(服务, "127.0.0.1", 41963);   // 阻塞；POST/DELETE /mcp，application/json，Mcp-Session-Id 会话；GET 405
 ```
+
+后台跑 HTTP 传输：顶层写 `函数 服务协程(服务: MCP服务, 端口: 整数) { 运行MCP服务_HTTP(服务, "127.0.0.1", 端口); }`
+然后 `启动 服务协程(服务, 端口);`（`启动` 不支持内联闭包）。往返示例 `examples/MCP服务HTTP_往返测.qi`。
 
 `MCP服务` **没有**从 `Harness.qi` 再导出（它要额外的 runtime FFI），必须指名道姓
 `导入 Harness.MCP服务::{…}`。
