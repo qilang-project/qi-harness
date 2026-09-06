@@ -148,6 +148,11 @@ run_suite "tool pipeline" tests/run-qi-test.sh tests/tool_pipeline/工具管线_
 run_suite "skills" tests/run-qi-test.sh tests/skills/技能_测.qi
 # MCP 资源/提示进代理：对着 tests/mcp_equip/fake_mcp_server.py（python3 stdio）跑
 run_suite "MCP resources/prompts equip" tests/run-qi-test.sh tests/mcp_equip/MCP装备_测.qi
+# 图记忆（关系型召回）。要 qi-graph(Graph) + qi-kv(KV)；解析不到时套件自己跳过
+# 而不是把门卡红 —— 除它以外 qi-harness 一概不依赖这两个包。
+run_clean_path_suite "graph memory" \
+    "/tmp/qi_harness_graph_memory_test.kv /tmp/qi_harness_graph_memory_merge_test.db /tmp/qi_harness_graph_memory_merge_test.kv" \
+    tests/graph_memory/run.sh
 # MCP服务 Streamable HTTP：同进程 goroutine 起 server，MCP客户端 + 裸 TCP 核对协议
 run_suite "MCP HTTP transport" tests/run-qi-test.sh tests/mcp_transport/MCP服务HTTP_测.qi
 run_suite "tool scheduling" tests/tool_scheduling/run.sh
