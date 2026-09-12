@@ -1,6 +1,6 @@
 [包]
 名称 = "Harness"
-版本 = "0.2.1"
+版本 = "0.3.0"
 入口 = "Harness.qi"
 
 [源码]
@@ -9,8 +9,8 @@
 [元数据]
 描述 = "qi-harness — LLM agent 框架，基于 Martin Fowler harness engineering 模式"
 作者 = "Qi Language Team"
-最低Qi版本 = "2026.07.24-1"
-Qi源码基线 = "qi@d5274029 + qi-runtime@cba00fba + qi-gui@82580227"
+最低Qi版本 = "2026.09.12-2"
+Qi源码基线 = "qi@d82fe23f + qi-runtime@ba333ad4 + qi-gui@493c6eba"
 
 [依赖]
 Web = "0.2.0"

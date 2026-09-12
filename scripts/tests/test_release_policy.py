@@ -193,11 +193,11 @@ class QiCompatibilityTests(unittest.TestCase):
 
     def test_published_minimum_matches_governed_release(self) -> None:
         manifest = (ROOT / "qi.toml").read_text(encoding="utf-8")
-        self.assertIn('最低Qi版本 = "2026.07.24-1"', manifest)
+        self.assertIn('最低Qi版本 = "2026.09.12-2"', manifest)
 
     def test_source_baseline_runs_all_compile_probes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            executable, log = self.fake_qi(Path(temporary), "2026.7.24-1")
+            executable, log = self.fake_qi(Path(temporary), "2026.9.12-2")
             result = run_script("check-qi-compat.py", "--qi", str(executable))
             self.assertEqual(result.returncode, 0, result.stderr)
             calls = log.read_text(encoding="utf-8").splitlines()
@@ -246,8 +246,9 @@ class QiSourcePolicyTests(unittest.TestCase):
     def test_workflows_pin_explicit_source_commits(self) -> None:
         for name in ("ci.yml", "release.yml"):
             text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-            self.assertIn("d527402942cb5a6eaae07be8040afd35e1cc58e8", text)
-            self.assertIn("cba00fbacf9a70bc646c283e1352ecbe68197127", text)
+            # qi 2026.09.12-2 + qi-runtime 2026.09.12-1（发布配套的那一组）
+            self.assertIn("d82fe23f269d4392b74daed863f5a572ee0385cb", text)
+            self.assertIn("ba333ad43161f8f7fbac62a849718d593f71653a", text)
 
     def test_source_ref_validation_accepts_the_pinned_shas(self) -> None:
         """install-qi-source.sh 的 SHA 校验必须真的放行我们钉的那些 SHA。
