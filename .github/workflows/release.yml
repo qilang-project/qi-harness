@@ -12,6 +12,8 @@ permissions:
 env:
   QI_WEB_REF: ce83ee311c60b22d4056529ecb730ccc7db94686
   QI_CLI_REF: 903ecd28eb97967d856eb88867046388f9d04cbb
+  QI_GRAPH_REF: 53c8ef9cf3da87f7f175abc82821997d5011514c
+  QI_KV_REF: 0f4ae81a67ee4888af22ab9bc5623c325cbc60b6
   QI_SOURCE_REF: d82fe23f269d4392b74daed863f5a572ee0385cb
   QI_RUNTIME_SOURCE_REF: ba333ad43161f8f7fbac62a849718d593f71653a
   QI_GUI_SOURCE_REF: 493c6ebad80925735e538c621e639948e9698969
@@ -116,16 +118,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          packages="${RUNNER_TEMP}/qi_packages"
+          # ⚠ 必须放在**项目目录里的 qi_packages/**，不能只靠 QI_PACKAGES_PATH。
+          # qi.toml 里 [依赖] 声明了的包（Web / Graph），2026.09.12-2 起编译器只认
+          # 项目自己的 qi_packages/<名>（也就是 `qi 包 安装` 会放的位置），找不到
+          # 直接报「注册中心依赖 尚未安装」，不再退到 QI_PACKAGES_PATH 去碰运气 ——
+          # 那是 qi 2.0 删掉祖先扫描时一并删掉的静默兜底。本地之所以一直好好的，
+          # 是 monorepo 根上的 qi工作区.toml [覆盖] 把它们指去了隔壁目录。
+          packages="${GITHUB_WORKSPACE}/qi_packages"
           mkdir -p "$packages"
-          ln -s "$GITHUB_WORKSPACE" "$packages/Harness"
-          git clone --quiet https://github.com/qilang-project/qi-web.git "$packages/Web"
-          git -C "$packages/Web" checkout --quiet "$QI_WEB_REF"
-          # qi-cli：cmd/qi-harness.qi（开发者 CLI）要导 CLI 包。这一步以前一直
-          # 缺着 —— CI 从没跑到过 CLI native（都死在更早的套件上），钉新工具链
-          # 后前面全绿了才第一次撞见「无法找到导入模块: CLI」。
-          git clone --quiet https://github.com/qilang-project/qi-cli.git "$packages/CLI"
-          git -C "$packages/CLI" checkout --quiet "$QI_CLI_REF"
+          clone_at() {   # 名 仓库 SHA
+            git clone --quiet "https://github.com/qilang-project/$2.git" "$packages/$1"
+            git -C "$packages/$1" checkout --quiet "$3"
+          }
+          clone_at Web qi-web "$QI_WEB_REF"
+          # qi-cli：cmd/qi-harness.qi（开发者 CLI）要导 CLI 包（[开发依赖]）。
+          clone_at CLI qi-cli "$QI_CLI_REF"
+          # 图记忆 依赖 qi-graph(Graph) → qi-kv(KV)。不装的话 graph memory 套件只会
+          # 自己跳过 —— 装上它才真的被测到。
+          clone_at Graph qi-graph "$QI_GRAPH_REF"
+          clone_at KV qi-kv "$QI_KV_REF"
+          # 兼容：未声明成依赖、按名字找包的那一路仍走 QI_PACKAGES_PATH
           echo "QI_PACKAGES_PATH=$packages" >> "$GITHUB_ENV"
 
       - name: Run full release quality gate

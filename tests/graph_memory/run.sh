@@ -18,7 +18,10 @@ set -eu
 # 编译器：默认用 workspace 的 release 产物。**不要**直接用 PATH 里的 qi ——
 # 本机 /usr/local/bin/qi 是旧拷贝，起手就 dyld 报 libz3 找不到，看着像套件挂了。
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-QI="${QI_BIN:-$ROOT/target/release/qi}"
+# 先 QI_BIN，再 PATH 上的 qi（CI 就是这么给的），最后才猜 monorepo 布局。
+# 原来只认 $ROOT/target/release/qi —— 仓库单独 checkout 时那儿什么都没有，
+# 这条套件在 CI 上从来没真跑过。
+QI="${QI_BIN:-$(command -v qi 2>/dev/null || printf '%s' "$ROOT/target/release/qi")}"
 export QI_RUNTIME_LIB="${QI_RUNTIME_LIB:-$ROOT/qi-runtime/target/release/libqi_runtime.a}"
 [ -x "$QI" ] || { echo "找不到 qi 二进制：$QI" >&2; exit 1; }
 

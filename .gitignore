@@ -20,3 +20,6 @@ examples/qi_packages/
 # Python tooling caches
 __pycache__/
 *.pyc
+
+# `qi 包 安装` / CI 装的声明依赖，不入库
+/qi_packages/
