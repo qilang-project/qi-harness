@@ -25,8 +25,8 @@ class Handler(BaseHTTPRequestHandler):
         # 长时程一段发**两次**请求：先干活（带工具），再单独问进度（带
         # response_format=json_object）。只有后者该回段末 JSON —— 跟真模型一样，
         # 不分辨的话计数器会串，一段被当成两段。
-        是问进度 = bool(request.get("response_format"))
-        if not 是问进度:
+        is_report = bool(request.get("response_format"))
+        if not is_report:
             content = "这一段我按要求干了活。"
         else:
             i = state["segments"]

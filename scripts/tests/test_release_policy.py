@@ -106,13 +106,13 @@ class ApiDiffTests(unittest.TestCase):
 
     def test_struct_field_removal_rename_retype_are_still_breaking(self) -> None:
         before = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, }\n"
-        for 名, after in (
+        for sym_name, after in (
             ("删字段", "[Harness]\n类型 配置 { 甲: 字符串, }\n"),
             ("改名", "[Harness]\n类型 配置 { 甲: 字符串, 丙: 整数, }\n"),
             ("改类型", "[Harness]\n类型 配置 { 甲: 字符串, 乙: 字符串, }\n"),
             ("换结构体名", "[Harness]\n类型 别的 { 甲: 字符串, 乙: 整数, }\n"),
         ):
-            with self.subTest(名=名):
+            with self.subTest(sym_name=sym_name):
                 self.assertEqual(self.classify(before, after).returncode, 20)
 
     def test_struct_field_addition_plus_removal_is_breaking(self) -> None:
@@ -120,8 +120,8 @@ class ApiDiffTests(unittest.TestCase):
         before = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, }\n"
         after = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n函数 alpha()\n"
         self.assertEqual(self.classify(before + "函数 alpha()\n", after).returncode, 10)
-        少了函数 = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n"
-        self.assertEqual(self.classify(before + "函数 alpha()\n", 少了函数).returncode, 20)
+        missing_fns = "[Harness]\n类型 配置 { 甲: 字符串, 乙: 整数, 丙: 字符串, }\n"
+        self.assertEqual(self.classify(before + "函数 alpha()\n", missing_fns).returncode, 20)
 
 
 class HistoricalApiBaselineTests(unittest.TestCase):
@@ -154,7 +154,11 @@ class HistoricalApiBaselineTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("additive public API drift", result.stdout)
-            self.assertIn("additive drift allowed for 0.1.0 -> 0.2.0", result.stdout)
+            # 候选版本是 qi.toml 里的当前版本，别写死：2026-09-12 把版本抬到 0.2.1
+            # 之后这条就一直红着，而它红不红跟它要测的东西（历史基线 + 附加漂移放行）
+            # 毫无关系。
+            current = run_script("version.py", "current").stdout.strip()
+            self.assertIn(f"additive drift allowed for 0.1.0 -> {current}", result.stdout)
 
 
 class ReleaseNotesTests(unittest.TestCase):

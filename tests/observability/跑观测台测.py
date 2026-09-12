@@ -69,7 +69,7 @@ def get(url: str, timeout: float = 5.0) -> tuple[int, str]:
         return e.code, e.read().decode("utf-8", "replace")
 
 
-def 工具链能编Web() -> tuple[bool, str]:
+def toolchain_can_build_web() -> tuple[bool, str]:
     """看板依赖 qi-web，而 qi-web 用到了**模块限定的类型标注**（`变量 x: 查.参数集`）。
 
     这个语法 2026.07.24-1 的编译器不认，报「意外的标记 `.`」。而 qi-web 的
@@ -95,15 +95,15 @@ def 工具链能编Web() -> tuple[bool, str]:
 
 
 def main() -> int:
-    可以, 详情 = 工具链能编Web()
-    if not 可以:
+    ok, details = toolchain_can_build_web()
+    if not ok:
         print("SKIP 观测台套件：当前工具链编不了 qi-web。")
         print("  看板（观测台.qi / 观测指标.qi）依赖 qi-web 的 Prometheus 注册表，")
         print("  而 qi-web 用了模块限定的类型标注，需要 qi ≥ 2026.08.12-1。")
         print("  跨度树 / 并发采集 / OTLP / 端到端 四条不依赖 qi-web，照常运行。")
         print("  探针输出：")
-        for 行 in 详情.splitlines()[:4]:
-            print(f"    {行[:160]}")
+        for line in details.splitlines()[:4]:
+            print(f"    {line[:160]}")
         return 0
 
     with tempfile.TemporaryDirectory(prefix="qi-obs-ui-") as tmp:
@@ -212,9 +212,9 @@ def main() -> int:
             # ——— 「实时」这一条 ———
             # 只验首屏的话，WS 断了看板就是个静态页，而首屏永远是对的。
             sys.path.insert(0, str(HERE))
-            from 迷你ws import 迷你WS
+            from mini_ws import MiniWS
 
-            ws = 迷你WS("127.0.0.1", obs_port, "/ws", timeout=8.0)
+            ws = MiniWS("127.0.0.1", obs_port, "/ws", timeout=8.0)
             try:
                 # 带准入的连接**首帧必须是 __订阅__**，否则服务端不建状态、
                 # 一帧都不推就断开。浏览器那边这步由内嵌运行时代劳，

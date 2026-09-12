@@ -96,7 +96,7 @@ def struct_only_gained_fields(before_line: str, after_line: str) -> bool:
     return len(new_fields) > len(old_fields)
 
 
-def 分出加字段(before: set[str], after: set[str]) -> tuple[set[str], set[str], list[str]]:
+def split_added_fields(before: set[str], after: set[str]) -> tuple[set[str], set[str], list[str]]:
     """把「同名结构体只加了字段」这一对从 删除/新增 里摘出来，单独当兼容变更报。
 
     不摘的话：一条老声明消失 + 一条新声明出现 = 差分器判定「有删除」= 破坏，
@@ -105,21 +105,21 @@ def 分出加字段(before: set[str], after: set[str]) -> tuple[set[str], set[st
     """
     removed = before - after
     added = after - before
-    配对: list[str] = []
+    pairs: list[str] = []
     for old_line in sorted(removed):
         old = parse_type_decl(old_line)
         if old is None:
             continue
         for new_line in sorted(added):
             if struct_only_gained_fields(old_line, new_line):
-                新字段 = sorted(
+                fresh_fields = sorted(
                     set(parse_type_decl(new_line)[1]) - set(old[1])
                 )
-                配对.append(f"类型 {old[0]} 新增字段 {', '.join(新字段)}（老字段未变，兼容）")
+                pairs.append(f"类型 {old[0]} 新增字段 {', '.join(fresh_fields)}（老字段未变，兼容）")
                 removed = removed - {old_line}
                 added = added - {new_line}
                 break
-    return removed, added, 配对
+    return removed, added, pairs
 
 
 def parse_version(value: str) -> tuple[int, int, int]:
@@ -164,10 +164,10 @@ def main() -> int:
     for section in sorted(set(baseline) | set(candidate)):
         before = baseline.get(section, set())
         after = candidate.get(section, set())
-        剩余删除, 剩余新增, 加字段 = 分出加字段(before, after)
-        additions.extend(f"[{section}] ~ {item}" for item in 加字段)
-        additions.extend(f"[{section}] + {item}" for item in sorted(剩余新增))
-        removals.extend(f"[{section}] - {item}" for item in sorted(剩余删除))
+        remaining_removed, remaining_added, added_fields = split_added_fields(before, after)
+        additions.extend(f"[{section}] ~ {item}" for item in added_fields)
+        additions.extend(f"[{section}] + {item}" for item in sorted(remaining_added))
+        removals.extend(f"[{section}] - {item}" for item in sorted(remaining_removed))
 
     if removals:
         print("breaking public API drift")

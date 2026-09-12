@@ -13,7 +13,7 @@ import socket
 import struct
 
 
-class 迷你WS:
+class MiniWS:
     def __init__(self, host: str, port: int, path: str, timeout: float = 5.0):
         self.sock = socket.create_connection((host, port), timeout=timeout)
         self.sock.settimeout(timeout)
