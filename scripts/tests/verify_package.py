@@ -11,6 +11,8 @@ import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 FORBIDDEN_PARTS = {".git", ".playwright-mcp", "__pycache__"}
 FORBIDDEN_SUFFIXES = {".db", ".ll", ".log", ".o", ".pyc", ".sqlite", ".sqlite3"}
@@ -93,10 +95,16 @@ def main() -> int:
     manifest = (tar_root / prefix / "qi.toml").read_text(encoding="utf-8")
     if version_line not in manifest:
         fail(f"packaged qi.toml does not contain {version_line}")
-    if not re.search(r'^最低Qi版本 = "2026.07.24-1"$', manifest, re.MULTILINE):
-        fail("packaged qi.toml does not require the governed Qi release")
-    if "qi@d5274029 + qi-runtime@cba00fba + qi-gui@82580227" not in manifest:
-        fail("packaged qi.toml does not declare the governed Qi source baseline")
+    # 治理基线的唯一出处是源码里的 qi.toml，这里只核对「打进包里的和源码一致」。
+    # 曾经把 2026.07.24-1 和三个 SHA 写死在这儿 —— 抬基线那天就红，而它红不红
+    # 跟它要测的东西（打包有没有丢字段）毫无关系。
+    source_manifest = (ROOT / "qi.toml").read_text(encoding="utf-8")
+    for key in ("最低Qi版本", "Qi源码基线"):
+        match = re.search(rf'^{key} = "([^"]+)"$', source_manifest, re.MULTILINE)
+        if match is None:
+            fail(f"source qi.toml lacks {key}")
+        if f'{key} = "{match.group(1)}"' not in manifest:
+            fail(f"packaged qi.toml does not carry the governed {key} ({match.group(1)})")
     print(f"verified {len(tar_tree)} packaged files")
     return 0
 

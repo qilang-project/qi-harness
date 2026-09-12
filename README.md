@@ -4,7 +4,7 @@ LLM agent 框架，基于 [Martin Fowler — Harness Engineering](https://martin
 
 跟 `qi-cli`（命令行）/ `qi-web`（HTTP 服务）平级，专门给 LLM agent 开发场景：把模型调用包在**可观测 + 可重试 + 可评估**的外壳里。
 
-qi-harness `0.2.x` requires Qi `2026.07.24-1` or newer. That release provides the stream-v2 timed-poll, tool-control, and Web transport body-limit ABIs used by reliable streams, controlled tools, and persistent services. CI and release preflight pin the exact Qi, qi-runtime, qi-gui, and qi-web commits used for this release and run compile/link probes for every required ABI family.
+qi-harness `0.3.x` requires Qi `2026.09.12-2` or newer（qi 2.0 那一轮：`列出目录` 回字符串列表句柄、`JSON.取显示值`、放开的保留字）。CI and release preflight pin the exact Qi, qi-runtime, qi-gui, and qi-web commits used for this release and run compile/link probes for every required ABI family.
 
 ## 项目结构
 

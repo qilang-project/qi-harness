@@ -2,6 +2,22 @@
 
 qi-harness is currently in the `0.x` series. Necessary API changes may occur before `1.0`, but each release must identify breaking changes here and in `CHANGELOG.md`.
 
+## Migrating to 0.3.0
+
+### Qi Toolchain Baseline
+
+qi-harness `0.3.x` requires Qi `2026.09.12-2` or newer. `文件工具` follows the new shape of `标准库.操作系统.列出目录` (a string-list handle instead of a newline-joined string) and `MCP装备` uses `标准库.JSON.取显示值`; older compilers cannot compile the package.
+
+The governed source baseline is Qi `d82fe23f269d4392b74daed863f5a572ee0385cb` (release 2026.09.12-2), qi-runtime `ba333ad43161f8f7fbac62a849718d593f71653a` (2026.09.12-1), qi-gui `493c6ebad80925735e538c621e639948e9698969`, and qi-web `ce83ee311c60b22d4056529ecb730ccc7db94686`.
+
+### Graph Recall Depth
+
+`图回忆(库, 关键词, 条数上限)` — the convenience form without an explicit hop count — now recalls **2 hops** instead of 1, and so does the automatic relation recall in `带记忆运行`. Code that pinned the old one-hop output (tests comparing injected blocks byte for byte) must either pass `1` explicitly or update the expected block. `设置图记忆默认跳数(1)` restores the old process-wide default.
+
+### Long-Horizon Tasks
+
+`长时程` tasks report milestones through the model; attach a check with `加里程碑带检查` when a milestone must be verified deterministically. A task that reports `完成` while milestones remain unmet no longer ends — it stays `进行中` and keeps running.
+
 ## Migrating to 0.2.0
 
 ### Qi Toolchain Baseline
