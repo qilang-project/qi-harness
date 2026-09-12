@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""每段回一条合法的段末 JSON，让长时程真的能推进里程碑并正常收场。
+"""配合长时程的两步协议：干活那一问随便答，问进度那一问回合法段末 JSON。
 
 tests/service_persistence/fake_openai.py 只会回 turn-N，长时程的解析路径
 （完成哪些里程碑 / 笔记 / 结局）永远走不到，测出来的只有「超限」那条。
@@ -12,7 +12,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-state = {"calls": 0}
+state = {"segments": 0}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -21,16 +21,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
-        json.loads(self.rfile.read(length))
-        i = state["calls"]
-        state["calls"] += 1
-        done = "完成" if i >= 2 else "继续"
-        payload = {
-            "完成": [i] if i < 3 else [],
-            "笔记": f"第 {i + 1} 段做完了第 {i} 个里程碑，下一步接着搬。",
-            "结局": done,
-        }
-        content = "干完了。\n" + json.dumps(payload, ensure_ascii=False)
+        request = json.loads(self.rfile.read(length))
+        # 长时程一段发**两次**请求：先干活（带工具），再单独问进度（带
+        # response_format=json_object）。只有后者该回段末 JSON —— 跟真模型一样，
+        # 不分辨的话计数器会串，一段被当成两段。
+        是问进度 = bool(request.get("response_format"))
+        if not 是问进度:
+            content = "这一段我按要求干了活。"
+        else:
+            i = state["segments"]
+            state["segments"] += 1
+            done = "完成" if i >= 2 else "继续"
+            payload = {
+                "完成": [i] if i < 3 else [],
+                "笔记": f"第 {i + 1} 段做完了第 {i} 个里程碑，下一步接着搬。",
+                "结局": done,
+            }
+            content = json.dumps(payload, ensure_ascii=False)
         body = {
             "id": "chatcmpl-longrun",
             "object": "chat.completion",
