@@ -31,10 +31,11 @@ total=0
 failed=0
 FAKE_PID=""
 
-start_fake() {   # $1 = 假模型脚本 → 打印端点
-    local pf
+start_fake() {   # $1 = 假模型脚本，$2… = 额外参数 → 打印端点
+    local pf script
+    script="$1"; shift
     pf="$(mktemp)"
-    python3 "$1" --port-file "$pf" >/dev/null 2>&1 &
+    python3 "$script" --port-file "$pf" "$@" >/dev/null 2>&1 &
     FAKE_PID=$!
     local n=0
     until [ -s "$pf" ]; do
@@ -82,10 +83,27 @@ run_one() {      # $1 = 相对 qi-harness 的 .qi 路径   $2 = 端点（可空�
     fi
 }
 
-rm -f /tmp/长时程测.db /tmp/长时程推进测.db /tmp/图记忆背景测.db /tmp/图记忆背景测.kv
+rm -f /tmp/长时程测.db /tmp/长时程推进测.db /tmp/图记忆背景测.db /tmp/图记忆背景测.kv \
+      /tmp/图接线测.db /tmp/图接线测.kv /tmp/图接线提示.txt /tmp/步数上限测.db /tmp/验收测.db /tmp/并发写图测.kv
 
 echo "── 两步协议假模型 ──"
 E=$(start_fake "$HERE/longrun/听话的假模型.py") && run_one tests/longrun/推进_测.qi "$E"
+stop_fake
+
+echo "── 图闭环假模型（会调 记事实，并把收到的提示存档） ──"
+PROMPT_DUMP=/tmp/图接线提示.txt
+export PROMPT_DUMP
+E=$(start_fake "$HERE/longrun/图循环假模型.py" --dump-prompts "$PROMPT_DUMP") \
+    && run_one tests/longrun/图接线_测.qi "$E"
+stop_fake
+unset PROMPT_DUMP
+
+echo "── 数步假模型（每段最多步 到底生不生效） ──"
+E=$(start_fake "$HERE/longrun/数步假模型.py") && run_one tests/longrun/步数上限_测.qi "$E"
+stop_fake
+
+echo "── 老报完成的假模型（里程碑验收闸） ──"
+E=$(start_fake "$HERE/longrun/老报完成的假模型.py") && run_one tests/longrun/验收_测.qi "$E"
 stop_fake
 
 echo "── 通用假模型 ──"
@@ -97,7 +115,8 @@ stop_fake
 echo "── 不需要模型 ──"
 for f in $(cd "$HERE/.." && find tests -name '*_测.qi' | sort); do
     case "$f" in
-        */推进_测.qi | */长时程_测.qi | */自动路径_测.qi) continue ;;
+        */推进_测.qi | */长时程_测.qi | */自动路径_测.qi | */图接线_测.qi \
+            | */步数上限_测.qi | */验收_测.qi) continue ;;
         # 这两个要真 LLM 端点：端到端_测 的断言里要 provider 返回的真实 token，
         # 观测台_测 要能真的发出请求。没凭据时它们不该算数。
         */端到端_测.qi | */观测台_测.qi) continue ;;
