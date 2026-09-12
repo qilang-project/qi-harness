@@ -290,8 +290,10 @@ check "$1"
     def test_release_runs_canonical_gate_with_pinned_web_package(self) -> None:
         text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("QI_WEB_REF:", text)
-        self.assertIn("qilang-project/qi-web.git", text)
-        self.assertIn('checkout --quiet "$QI_WEB_REF"', text)
+        # 依赖统一经 clone_at 名 仓库 SHA 装进项目自己的 qi_packages/
+        self.assertIn('https://github.com/qilang-project/$2.git', text)
+        self.assertIn('clone_at Web qi-web "$QI_WEB_REF"', text)
+        self.assertIn('packages="${GITHUB_WORKSPACE}/qi_packages"', text)
         self.assertIn('run: "$GITHUB_WORKSPACE/run-offline-tests.sh"', text)
         self.assertNotIn('run: "$GITHUB_WORKSPACE/scripts/tests/run.sh"', text)
 
