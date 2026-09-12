@@ -84,7 +84,7 @@ run_one() {      # $1 = 相对 qi-harness 的 .qi 路径   $2 = 端点（可空�
 }
 
 rm -f /tmp/长时程测.db /tmp/长时程推进测.db /tmp/图记忆背景测.db /tmp/图记忆背景测.kv \
-      /tmp/图接线测.db /tmp/图接线测.kv /tmp/图接线提示.txt /tmp/步数上限测.db /tmp/验收测.db /tmp/并发写图测.kv
+      /tmp/图接线测.db /tmp/图接线测.kv /tmp/图接线提示.txt /tmp/步数上限测.db /tmp/验收测.db /tmp/并发写图测.kv /tmp/预算续跑测.db
 
 echo "── 两步协议假模型 ──"
 E=$(start_fake "$HERE/longrun/听话的假模型.py") && run_one tests/longrun/推进_测.qi "$E"
@@ -109,6 +109,7 @@ stop_fake
 echo "── 通用假模型 ──"
 E=$(start_fake "$HERE/service_persistence/fake_openai.py") || { echo "假模型起不来" >&2; exit 1; }
 run_one tests/longrun/长时程_测.qi "$E"
+run_one tests/longrun/预算续跑_测.qi "$E"
 run_one tests/context/自动路径_测.qi "$E"
 stop_fake
 
@@ -116,7 +117,7 @@ echo "── 不需要模型 ──"
 for f in $(cd "$HERE/.." && find tests -name '*_测.qi' | sort); do
     case "$f" in
         */推进_测.qi | */长时程_测.qi | */自动路径_测.qi | */图接线_测.qi \
-            | */步数上限_测.qi | */验收_测.qi) continue ;;
+            | */步数上限_测.qi | */验收_测.qi | */预算续跑_测.qi) continue ;;
         # 这两个要真 LLM 端点：端到端_测 的断言里要 provider 返回的真实 token，
         # 观测台_测 要能真的发出请求。没凭据时它们不该算数。
         */端到端_测.qi | */观测台_测.qi) continue ;;
