@@ -21,8 +21,9 @@ env:
   # 观测指标.qi 用 Web.指标 时踩过一次：钉的 120576d 早于整个指标模块。
   QI_WEB_REF: ce83ee311c60b22d4056529ecb730ccc7db94686
   QI_CLI_REF: 903ecd28eb97967d856eb88867046388f9d04cbb
-  QI_GRAPH_REF: 53c8ef9cf3da87f7f175abc82821997d5011514c
+  QI_GRAPH_REF: 9465acc4a2044305868e777ac54bac7dfe11a36c
   QI_KV_REF: 0f4ae81a67ee4888af22ab9bc5623c325cbc60b6
+  QI_TEST_REF: 9dfa2542ac5bfa15010218337411e5f739514a61
   QI_SOURCE_REF: d82fe23f269d4392b74daed863f5a572ee0385cb
   QI_RUNTIME_SOURCE_REF: ba333ad43161f8f7fbac62a849718d593f71653a
   QI_GUI_SOURCE_REF: 493c6ebad80925735e538c621e639948e9698969
@@ -98,6 +99,16 @@ jobs:
           # 自己跳过 —— 装上它才真的被测到。
           clone_at Graph qi-graph "$QI_GRAPH_REF"
           clone_at KV qi-kv "$QI_KV_REF"
+          # qi-test（包名就叫 测试）：图记忆/意图两套用它的断言库。本地是 monorepo
+          # 根上的 qi工作区.toml [覆盖] 供的，CI 没有那份文件 —— 不 clone 就是
+          # 「无法找到导入模块: 测试」。
+          clone_at 测试 qi-test "$QI_TEST_REF"
+          # ⚠ Graph 自己的 qi.toml 也声明了 [依赖] KV，同样只认**它自己的**
+          # qi_packages/KV。少这一步的后果不是报错而是**静默跳过**：
+          # graph memory 套件探测到「注册中心依赖 KV 尚未安装」就自跳，
+          # 于是它在 CI 上从来没真跑过，日志里还写着 passed。
+          mkdir -p "$packages/Graph/qi_packages"
+          cp -R "$packages/KV" "$packages/Graph/qi_packages/KV"
           # 兼容：未声明成依赖、按名字找包的那一路仍走 QI_PACKAGES_PATH
           echo "QI_PACKAGES_PATH=$packages" >> "$GITHUB_ENV"
 
