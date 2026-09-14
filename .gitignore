@@ -23,3 +23,6 @@ __pycache__/
 
 # `qi 包 安装` / CI 装的声明依赖，不入库
 /qi_packages/
+
+# 门禁跑测时的临时日志，不入库
+.gate*.log
