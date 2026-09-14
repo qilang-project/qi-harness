@@ -4,6 +4,11 @@ All notable changes to qi-harness are recorded here. The project follows semanti
 
 ## [Unreleased]
 
+### Changed
+
+- 可选依赖 `Graph` 抬到 `0.2.0`：`examples/仓库问答.qi` 用它新加的按标签排行
+  （`排行JSON(图, 表, 取前几, 标签)`）。只影响用 `图记忆` / 那个示例的人。
+
 ### Added
 
 - **意图识别**（新模块 `意图.qi`，书 14.5）：`创建分类器` / `加类别` / `加子类别` /
