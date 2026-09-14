@@ -21,7 +21,18 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 # 先 QI_BIN，再 PATH 上的 qi（CI 就是这么给的），最后才猜 monorepo 布局。
 # 原来只认 $ROOT/target/release/qi —— 仓库单独 checkout 时那儿什么都没有，
 # 这条套件在 CI 上从来没真跑过。
-QI="${QI_BIN:-$(command -v qi 2>/dev/null || printf '%s' "$ROOT/target/release/qi")}"
+# qi 的取法：QI_BIN → monorepo 里刚构建的那份 → PATH。
+# **别把 PATH 排在前面**：这台机器上 /usr/local/bin/qi 是很久以前装的拷贝，
+# 连 z3 都链不上，一跑就 Abort trap: 6，错误信息还指向 dyld，看半天看不出是选错了二进制。
+# CI 上没有 monorepo 的 target/，自然落到 PATH（那儿是现编的 pinned 工具链）。
+QI="${QI_BIN:-}"
+if [ -z "$QI" ]; then
+    if [ -x "$ROOT/../target/release/qi" ]; then
+        QI="$ROOT/../target/release/qi"
+    else
+        QI="$(command -v qi 2>/dev/null || printf '%s' qi)"
+    fi
+fi
 export QI_RUNTIME_LIB="${QI_RUNTIME_LIB:-$ROOT/qi-runtime/target/release/libqi_runtime.a}"
 [ -x "$QI" ] || { echo "找不到 qi 二进制：$QI" >&2; exit 1; }
 

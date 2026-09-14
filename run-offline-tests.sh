@@ -150,6 +150,8 @@ run_suite "skills" tests/run-qi-test.sh tests/skills/技能_测.qi
 run_suite "MCP resources/prompts equip" tests/run-qi-test.sh tests/mcp_equip/MCP装备_测.qi
 # 图记忆（关系型召回）。要 qi-graph(Graph) + qi-kv(KV)；解析不到时套件自己跳过
 # 而不是把门卡红 —— 除它以外 qi-harness 一概不依赖这两个包。
+# 意图识别 / 推理顺序 / 问答管线。端到端那条要 Graph，套件自己会跳过
+run_suite "intent and reasoning order" tests/intent/run.sh
 run_clean_path_suite "graph memory" \
     "/tmp/qi_harness_graph_memory_test.kv /tmp/qi_harness_graph_memory_merge_test.db /tmp/qi_harness_graph_memory_merge_test.kv" \
     tests/graph_memory/run.sh

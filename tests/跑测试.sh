@@ -117,13 +117,22 @@ echo "── 不需要模型 ──"
 for f in $(cd "$HERE/.." && find tests -name '*_测.qi' | sort); do
     case "$f" in
         */推进_测.qi | */长时程_测.qi | */自动路径_测.qi | */图接线_测.qi \
-            | */步数上限_测.qi | */验收_测.qi | */预算续跑_测.qi) continue ;;
+            | */步数上限_测.qi | */验收_测.qi | */预算续跑_测.qi \
+            | */意图与推理顺序_测.qi | */问答管线_测.qi) continue ;;
         # 这两个要真 LLM 端点：端到端_测 的断言里要 provider 返回的真实 token，
         # 观测台_测 要能真的发出请求。没凭据时它们不该算数。
         */端到端_测.qi | */观测台_测.qi) continue ;;
     esac
     run_one "$f" ""
 done
+
+echo "── 意图 / 推理顺序 / 问答管线（自带假模型，Graph 缺席时自跳过） ──"
+total=$((total + 1))
+if QI_BIN="$QI" bash "$HERE/intent/run.sh"; then
+    echo "  ok   意图套件"
+else
+    echo "  FAIL 意图套件"; failed=$((failed + 1))
+fi
 
 echo ""
 echo "qi-harness: $((total - failed))/$total 通过"
