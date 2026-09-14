@@ -56,7 +56,12 @@ def main() -> int:
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                timeout=15,
+                # 这一条**编译再运行**一个 .qi，而且被测行为里有一次故意的 1 秒重试。
+                # 闲时整套 3 秒，但 15 秒的余量只有 5 倍 —— 机器一忙就够不着：
+                # 2026-09-14 有别的活把 load average 顶到 183，这里实测 19.9 秒，
+                # 于是门禁红在超时上，而不是红在被测的东西上。
+                # 超时是用来兜死循环的，不是用来卡性能的；90 秒仍然能兜住真卡死。
+                timeout=90,
                 check=False,
             )
             print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
