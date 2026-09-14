@@ -6,7 +6,7 @@ All notable changes to qi-harness are recorded here. The project follows semanti
 
 ### Changed
 
-- 可选依赖 `Graph` 抬到 `0.2.0`：`examples/仓库问答.qi` 用它新加的按标签排行
+- 可选依赖 `Graph` 抬到 `0.2.1`：`examples/仓库问答.qi` 用它新加的按标签排行
   （`排行JSON(图, 表, 取前几, 标签)`）。只影响用 `图记忆` / 那个示例的人。
 
 ### Added

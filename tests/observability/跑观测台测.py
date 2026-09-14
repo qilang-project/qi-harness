@@ -110,6 +110,7 @@ def main() -> int:
         tmp_path = Path(tmp)
         port_file = tmp_path / "port"
         state_file = tmp_path / "state.json"
+        done_file = tmp_path / "agent-done"
         obs_port = free_port()
 
         fixture = subprocess.Popen(
@@ -132,6 +133,8 @@ def main() -> int:
             env["QI_OBS_PORT"] = str(obs_port)
             # 不设这个 qi-web 就不挂 /metrics（默认不开口子）
             env["QI_METRICS_TOKEN"] = "public"
+            # agent 跑完了才写这个文件。见下面轮询处的说明。
+            env["QI_OBS_DONE_FILE"] = str(done_file)
 
             app = subprocess.Popen(
                 [QI, "run", str(HERE / "观测台_测.qi")],
@@ -139,22 +142,31 @@ def main() -> int:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             )
 
-            # 等 agent 跑完（qi 那边打 READY）。qi 的 stdout 是全缓冲的，
-            # 所以别指望能逐行读到 —— 改成轮询 HTTP 直到页面里出现运行记录。
+            # 等 agent 跑完。qi 的 stdout 是全缓冲的，READY 那行读不到，
+            # 所以 观测台_测.qi 在 运行() 返回之后写 done_file，这儿等它。
+            #
+            # 别拿页面当就绪信号 —— 看板左栏**连在跑的运行也列**（live=1），
+            # 代理名在 agent 刚开始那一刻就已经在 HTML 里了。按「页面上出现代理名」
+            # 就 break，机器被压满时会抓到跑到一半的快照：3 条跨度
+            # （agent/turn/llm），工具跨度还没有，于是瀑布图上是 step-0-tool-0。
+            # 这正是那两条断言偶发红的原因，整套门禁一起跑时才踩得到。
             deadline = time.monotonic() + 90
-            body = ""
             while time.monotonic() < deadline:
                 if app.poll() is not None:
                     out = app.stdout.read() if app.stdout else ""
                     raise RuntimeError(f"观测台进程提前退出:\n{out}")
-                try:
-                    status, body = get(f"http://127.0.0.1:{obs_port}/")
-                    if status == 200 and "看板自测代理" in body:
-                        break
-                except Exception:
-                    pass
-                time.sleep(0.3)
+                if done_file.exists():
+                    break
+                time.sleep(0.1)
+            else:
+                raise RuntimeError(
+                    "等了 90 秒 agent 还没跑完（没等到 done 标记）。"
+                    f"端口 {obs_port}，进程还活着={app.poll() is None}"
+                )
 
+            # 跑完了再抓页面。这一发必须成功 —— 服务在 agent 之前就听上了，
+            # 这会儿还连不上就是真出事了（端口撞了、看板挂了），
+            # 让它直接炸出来，别退化成一堆看不懂的 FAIL。
             status, body = get(f"http://127.0.0.1:{obs_port}/")
             check(status == 200, "看板页返回 200", str(status))
             check("观测台自测" in body, "标题用的是设置的那个")

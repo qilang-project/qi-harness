@@ -1,0 +1,1503 @@
+
+==> suite: Qi compatibility
+Qi compatibility verified: qi v2026.9.12-2 >= 2026.09.12-2
+==> passed: Qi compatibility (6s)
+
+==> git diff --check HEAD~1 HEAD
+
+==> suite: Release policy
+.......................
+----------------------------------------------------------------------
+Ran 23 tests in 2.478s
+
+OK
+qi.toml version matches 0.5.0
+unreleased notes are present
+comparing source API with public-api.txt from HEAD~1
+no public API drift
+==> passed: Release policy (2s)
+
+==> suite: offline gate exit propagation
+
+==> suite: intentional failure
+==> failed: intentional failure (exit 23, 0s)
+
+==> suite: controlled tool
+
+==> passed: controlled tool (0s)
+error: required suite "missing candidate" has no test runner or test file candidate
+Traceback (most recent call last):
+  File "/Users/liliang/Things/dev/lang/qilang/qi-harness/tests/cli/run.py", line 199, in <module>
+    check("intentional_failure", False)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/liliang/Things/dev/lang/qilang/qi-harness/tests/cli/run.py", line 19, in check
+    raise AssertionError(message)
+AssertionError: check failed: intentional_failure
+Traceback (most recent call last):
+  File "/Users/liliang/Things/dev/lang/qilang/qi-harness/tests/cli/run.py", line 199, in <module>
+    check("intentional_failure", False)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/liliang/Things/dev/lang/qilang/qi-harness/tests/cli/run.py", line 19, in check
+    raise AssertionError(message)
+AssertionError: check failed: intentional_failure
+offline gate regression tests passed
+==> passed: offline gate exit propagation (1s)
+
+==> suite: Public API baseline
+public API manifest matches source
+==> passed: Public API baseline (0s)
+
+==> suite: Function name collisions
+没有同名同元数冲突（扫了 1149 个函数定义）
+==> passed: Function name collisions (0s)
+
+==> suite: All example syntax
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+所有文件语法检查通过
+CHECK examples/MCP服务HTTP_往返测.qi
+CHECK examples/MCP服务_往返测.qi
+CHECK examples/MCP服务示例.qi
+CHECK examples/_everything自测.qi
+SKIP examples/_http大请求复现.qi (Web: requires the optional qi-web package)
+CHECK examples/_http自测.qi
+CHECK examples/_大SSE修复测试.qi
+CHECK examples/_重载测.qi
+CHECK examples/deepseek工具.qi
+CHECK examples/deepseek流式.qi
+CHECK examples/deepseek流式工具.qi
+CHECK examples/deepseek测试.qi
+CHECK examples/mcp_http导航.qi
+CHECK examples/mcp_http测试.qi
+CHECK examples/mcp_资源.qi
+CHECK examples/mcp_采样.qi
+CHECK examples/mcp导航.qi
+CHECK examples/mcp测试.qi
+SKIP examples/seo审计/seo命令行.qi (CLI: requires the optional qi-cli package)
+SKIP examples/seo审计/服务.qi (Web: requires the optional qi-web package)
+CHECK examples/上下文_摘要压缩.qi
+CHECK examples/上下文_滑窗测.qi
+SKIP examples/仓库问答.qi (Graph: needs qi-graph for the schema and query steps; the intent suite covers the same path)
+CHECK examples/代理服务示例.qi
+CHECK examples/优先级示例.qi
+CHECK examples/健身计划.qi
+CHECK examples/原始字符串测.qi
+CHECK examples/向量记忆_相似度测.qi
+CHECK examples/向量记忆_语义检索.qi
+CHECK examples/图_崩溃续跑.qi
+CHECK examples/图_检查点HITL.qi
+CHECK examples/图_计数循环.qi
+CHECK examples/图记忆_关系召回.qi
+CHECK examples/填充模板测.qi
+CHECK examples/多代理_分诊.qi
+CHECK examples/多模态图像测.qi
+CHECK examples/家电门店助手.qi
+CHECK examples/尝试询问测.qi
+CHECK examples/嵌入相似度测.qi
+CHECK examples/工具助手.qi
+CHECK examples/工具模式_端到端.qi
+CHECK examples/工具模式测.qi
+CHECK examples/工具白名单示例.qi
+CHECK examples/带图问答.qi
+CHECK examples/常驻工示例.qi
+CHECK examples/并行询问测.qi
+CHECK examples/异步询问测.qi
+CHECK examples/循环_迭代标语.qi
+CHECK examples/技能示例.qi
+CHECK examples/护栏_测.qi
+CHECK examples/提示模板测.qi
+CHECK examples/教程_快速开始.qi
+CHECK examples/文件助手.qi
+CHECK examples/格式字符串测.qi
+CHECK examples/检索_混合测.qi
+CHECK examples/检索_端到端.qi
+CHECK examples/流表达式测.qi
+CHECK examples/流迭代测.qi
+CHECK examples/目标监控示例.qi
+CHECK examples/知客.qi
+CHECK examples/磁带测.qi
+CHECK examples/简单问答.qi
+CHECK examples/自然语言待办.qi
+CHECK examples/观测台演示.qi
+CHECK examples/记忆示例.qi
+CHECK examples/评估_打分测.qi
+CHECK examples/评估_裁判.qi
+CHECK examples/评估套件测.qi
+CHECK examples/词法索引_中文.qi
+CHECK examples/询问嵌套测.qi
+CHECK examples/询问数组测.qi
+CHECK examples/询问枚举测.qi
+CHECK examples/询问测.qi
+CHECK examples/询问重试测.qi
+CHECK examples/课程生成器.qi
+CHECK examples/运行报告测.qi
+CHECK examples/追踪_跨度测.qi
+CHECK examples/递归分解示例.qi
+CHECK examples/重试_熔断测.qi
+CHECK examples/预算_测.qi
+CHECK examples/预算强制测.qi
+examples syntax: checked 77, skipped 4
+==> passed: All example syntax (13s)
+
+==> suite: Harness syntax
+所有文件语法检查通过
+==> passed: Harness syntax (0s)
+
+==> suite: MCP service syntax
+所有文件语法检查通过
+==> passed: MCP service syntax (0s)
+
+==> suite: MCP equip syntax
+所有文件语法检查通过
+==> passed: MCP equip syntax (0s)
+
+==> suite: Agent service syntax
+所有文件语法检查通过
+==> passed: Agent service syntax (1s)
+
+==> suite: MCP service example syntax
+所有文件语法检查通过
+==> passed: MCP service example syntax (0s)
+
+==> suite: MCP HTTP round-trip example syntax
+所有文件语法检查通过
+==> passed: MCP HTTP round-trip example syntax (0s)
+
+==> suite: Agent service example syntax
+所有文件语法检查通过
+==> passed: Agent service example syntax (1s)
+
+==> suite: retry resource isolation
+✅ 正常响应→0 = 0
+✅ 空响应→1 = 1
+✅ 429→1 = 1
+✅ 503→1 = 1
+✅ 超时→1 = 1
+✅ 401→2 = 2
+✅ 403→2 = 2
+✅ 422→2 = 2
+✅ 工具网络失败→1 = 1
+✅ JSON数组→0 = 0
+✅ 正常文本含503→0 = 0
+
+{"ts":1789369415872,"trace":"-","type":"retry","agent":"自测","detail":"试次 1 可重试错误，延迟 0 ms"}
+{"ts":1789369415872,"trace":"-","type":"retry","agent":"自测","detail":"试次 2 可重试错误，延迟 0 ms"}
+{"ts":1789369415872,"trace":"-","type":"retry_ok","agent":"自测","detail":"成功于试次 3"}
+✅ 两败一成调用3次 = 3
+✅ 两败一成返回成功
+{"ts":1789369415872,"trace":"-","type":"error","agent":"自测","detail":"致命错误，不重试: LLM调用失败: API返回错误 401 Unauthorized"}
+✅ 致命错误只调用1次 = 1
+
+✅ 初始允许 = 1
+✅ 失败1后仍允许 = 1
+{"ts":1789369415872,"trace":"-","type":"circuit_open","agent":"熔断","detail":"连续失败 2 次，断路打开 60000ms"}
+✅ 失败2后打开→拒绝 = 0
+熔断状态: 打开
+✅ 记成功后恢复允许 = 1
+
+✅ 新代理资源句柄独立
+{"ts":1789369415873,"trace":"-","type":"circuit_open","agent":"熔断","detail":"连续失败 1 次，断路打开 60000ms"}
+✅ 甲失败后甲熔断 = 0
+✅ 甲失败不影响乙 = 1
+✅ 甲取得自己的令牌 = 1
+✅ 乙仍有独立令牌 = 1
+✅ 甲第二次无令牌且不等待 = 0
+✅ builder 显式共享资源
+{"ts":1789369415873,"trace":"-","type":"circuit_open","agent":"熔断","detail":"连续失败 1 次，断路打开 60000ms"}
+✅ 丙失败使丁看到熔断 = 0
+✅ 丙取得共享令牌 = 1
+✅ 丁看到共享桶已空 = 0
+
+✅ 全部 28 项通过：兼容 API + 重试资源隔离和显式共享正确
+==> passed: retry resource isolation (2s)
+
+==> suite: budget example
+✅ 初始不超
+✅ 初始余量1000
+✅ 成本300不超
+✅ 成本500达到上限
+✅ 无限预算不超
+✅ 无限余量-1
+预算[令牌 0/1000 成本(分) 500]
+
+✅ 全部 6 项通过：预算账本 + 超限判定正确
+==> passed: budget example (3s)
+
+==> suite: context window example
+✅ 种入历史7条
+估算令牌('第一个问题') = 5
+历史令牌估算 = 62
+✅ 低阈值需要压缩
+{"ts":1789369421013,"trace":"-","type":"context_trim","agent":"上下文","detail":"滑窗裁剪 7 → 3 条"}
+
+✅ 滑窗保留system和最近2条
+裁剪后历史: [{"role":"system","content":"你是助手"},{"role":"user","content":"第三个问题"},{"role":"assistant","content":"第三个回答"}]
+✅ 保留system
+✅ 移除较早消息
+✅ 保留最近问题
+✅ 保留最近回答
+
+✅ 全部 7 项通过：上下文滑窗裁剪正确
+==> passed: context window example (3s)
+
+==> suite: evaluation example
+✅ 包含命中
+✅ 包含不中
+✅ 精确命中
+✅ 精确不中
+✅ 正则命中数字
+✅ 正则无数字
+✅ JSON加载2条
+===== 基线对比 =====
+  [回归] 用例甲 PASS -> FAIL
+回归 1 · 修复 0 · 新增 0
+✅ 检测到1个回归
+
+✅ 全部 8 项通过：打分器 + JSON 加载 + 基线回归正确
+==> passed: evaluation example (2s)
+
+==> suite: cron schedule
+── 解析 ──
+── 该拒的要拒 ──
+── 匹配（UTC 口径）──
+── 下次触发 ──
+── 说明 ──
+── 本地时区 ──
+  本机偏移 8 小时（仅供参考，不断言）
+
+通过 55，失败 0
+==> passed: cron schedule (3s)
+
+==> suite: resident worker
+── 出口：扇出与去重 ──
+── 推送 JSON ──
+── 工循环（间隔模式）──
+── 后台工与停工 ──
+── 排期模式 ──
+  九点工下次：2026-09-15 09:00:00（本地）
+  九点工 · 排期 0 9 * * *
+  巡检 · 每 300 秒
+── 事件桥 ──
+── 事件桥 × 去重（防刷屏）──
+
+通过 47，失败 0
+==> passed: resident worker (14s)
+
+==> suite: event bus
+PASS run_id_created
+PASS isolated_failure_continues
+PASS subscriber_order
+PASS protocol_version
+PASS run_field
+PASS turn_field
+PASS step_field
+PASS type_field
+PASS agent_field
+PASS payload_field
+PASS canonical_payload_object
+PASS trace_adapter_run
+PASS trace_adapter_detail
+PASS clear_returns_count
+PASS non_isolated_failure_stops
+PASS subscriber_stop_order
+PASS bus_a_subscription_sequence
+PASS bus_b_subscription_sequence
+PASS bus_a_receives_own_event
+PASS bus_b_does_not_receive_bus_a_event
+PASS bus_a_does_not_receive_bus_b_event
+PASS bus_b_receives_own_event
+PASS bus_a_clear_count
+PASS bus_a_clear_does_not_clear_bus_b
+PASS lifecycle_event_total_24
+==> passed: event bus (2s)
+
+==> suite: Agent lifecycle
+{"ts":1789369445423,"trace":"-","type":"llm_call","agent":"agent-lifecycle-test","detail":"call the fixture tool"}
+{"ts":1789369445432,"trace":"-","type":"llm_response","agent":"agent-lifecycle-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_fixture_1\",\"type\":\"function\",\"function\":{\"name\":\"fixture_echo\",\"arguments\":\"{\\\"text\\\":\\\"ping\\\"}\"}}]}"}
+{"ts":1789369445432,"trace":"-","type":"tool_call","agent":"agent-lifecycle-test","detail":"fixture_echo({\"text\":\"ping\"})"}
+{"ts":1789369445433,"trace":"-","type":"tool_result","agent":"agent-lifecycle-test","detail":"fixture_echo → fixture-result"}
+{"ts":1789369445434,"trace":"-","type":"llm_response","agent":"agent-lifecycle-test","detail":"tool-finished"}
+{"ts":1789369445434,"trace":"-","type":"usage","agent":"agent-lifecycle-test","detail":"{\"prompt\":4,\"completion\":1,\"total\":5}"}
+{"ts":1789369445434,"trace":"-","type":"done","agent":"agent-lifecycle-test","detail":"tool-finished"}
+PASS agent_lifecycle_result
+PASS agent_lifecycle_order
+PASS agent_lifecycle_count
+PASS agent_lifecycle_metadata
+{"ts":1789369445434,"trace":"-","type":"llm_call","agent":"agent-lifecycle-test","detail":"timeout fixture"}
+{"ts":1789369446445,"trace":"-","type":"error","agent":"agent-lifecycle-test","detail":"智能重试 1 次全部失败"}
+{"ts":1789369446445,"trace":"-","type":"llm_response","agent":"agent-lifecycle-test","detail":"工具对话失败: HTTP请求失败: error sending request for url (http://127.0.0.1:56831/v1/slow/chat/completions)（根因: operation timed out）"}
+PASS agent_lifecycle_error_result
+PASS agent_lifecycle_error_balanced
+PASS agent_lifecycle_error_count
+PASS agent_lifecycle_error_metadata
+PASS agent_lifecycle_retry_error_payload
+==> passed: Agent lifecycle (4s)
+
+==> suite: event adapters
+PASS adapters_are_opt_in
+PASS trace_one_line_per_event
+PASS trace_json_valid
+PASS trace_run_id
+PASS trace_turn_id
+PASS trace_type
+PASS report_step_count
+PASS report_tokens
+PASS report_cost
+PASS report_first_order
+PASS report_second_order
+PASS report_first_kind
+PASS report_second_kind
+PASS report_prompt_tokens
+PASS report_completion_tokens
+PASS report_nested_event_kinds
+PASS report_nested_llm_closed_independently
+PASS event_adapters_total_17
+==> passed: event adapters (3s)
+
+==> suite: span tree
+PASS 跨度数为5
+PASS 第0个是agent
+PASS agent是根
+PASS agent深度0
+PASS 第1个是turn
+PASS turn的父是agent
+PASS turn深度1
+PASS 第2个是llm
+PASS llm的父是turn
+PASS llm深度2
+PASS llm令牌120
+PASS 第3个是tool
+PASS tool的父是turn而不是llm
+PASS tool名字取自载荷name
+PASS 令牌合计200
+PASS 成本合计12
+PASS 已结束
+PASS 所有跨度都已收尾且成功
+PASS 出错树3个跨度
+PASS llm被标红
+PASS 错误原因取自载荷reason
+PASS agent本身仍算成功收尾
+PASS 丢end仍是3个跨度
+PASS turn照常收尾
+PASS agent照常收尾
+PASS 没收到end的llm标为未结束
+PASS 未结束的状态是进行中
+PASS 未结束标live
+PASS 运行中也能给出已耗时
+PASS 只保留3次运行
+PASS 最老的已淘汰
+PASS 最新的还在
+PASS 撞顶后不再增长
+PASS 丢弃有计数不是悄悄丢
+PASS A两个跨度
+PASS B两个跨度
+PASS A的第二个是turn
+PASS B的第二个是llm
+PASS B的llm挂在自己的agent下
+PASS 带引号换行的名字仍能解析
+PASS 名字原样还原
+PASS 摘要两条
+PASS 最新的排最前
+PASS S2还在跑
+PASS 根跨度偏移为0
+PASS 长段不短于它睡的时长
+PASS 短段不短于它睡的时长
+PASS 长段比短段长（宽度才分得开）
+PASS 总耗时覆盖两段之和
+PASS 第二段偏移排在第一段之后
+PASS 最后一段不超出总耗时
+
+通过 51，失败 0
+==> passed: span tree (3s)
+
+==> suite: span concurrency
+PASS 甲代理-跨度数
+PASS 甲代理-唯一根
+PASS 甲代理-层级没串台
+PASS 甲代理-全收尾
+PASS 甲代理-令牌合计
+PASS 甲代理-代理名没串
+PASS 乙代理-跨度数
+PASS 乙代理-唯一根
+PASS 乙代理-层级没串台
+PASS 乙代理-全收尾
+PASS 乙代理-令牌合计
+PASS 乙代理-代理名没串
+PASS 丙代理-跨度数
+PASS 丙代理-唯一根
+PASS 丙代理-层级没串台
+PASS 丙代理-全收尾
+PASS 丙代理-令牌合计
+PASS 丙代理-代理名没串
+PASS 丁代理-跨度数
+PASS 丁代理-唯一根
+PASS 丁代理-层级没串台
+PASS 丁代理-全收尾
+PASS 丁代理-令牌合计
+PASS 丁代理-代理名没串
+PASS 戊代理-跨度数
+PASS 戊代理-唯一根
+PASS 戊代理-层级没串台
+PASS 戊代理-全收尾
+PASS 戊代理-令牌合计
+PASS 戊代理-代理名没串
+
+通过 30，失败 0
+==> passed: span concurrency (3s)
+
+==> suite: OTLP export
+导出返回 1
+PASS 收到两次导出
+PASS 打在 /v1/traces 上
+PASS Content-Type 是 json
+PASS 第一棵树 5 个 span
+PASS service.name 在 resource 上
+PASS spanId 都是 16 位 hex
+PASS traceId 都是 32 位 hex
+PASS 同一棵树 traceId 一致
+PASS traceId 就是 run_id 去横杠
+PASS 恰好一个根 span
+PASS 4 个非根 span 都带 parentSpanId
+PASS 每个 parentSpanId 都指向本批里真实存在的 span
+PASS 根下恰好一个 turn
+PASS turn 下三个叶子（llm/tool/llm）
+PASS 叶子种类正确
+PASS endTime 不早于 startTime
+PASS 时间戳是纳秒量级
+PASS llm 的 token 落到了对的 span 上
+PASS 出错的 span 带 error 属性
+PASS 第二棵树 2 个 span
+PASS 两次运行的 spanId 不重叠
+PASS 两次运行 traceId 不同
+
+通过 22，失败 0
+==> passed: OTLP export (3s)
+
+==> suite: observability end-to-end
+{"ts":1789369461559,"trace":"-","type":"llm_call","agent":"端到端观测","detail":"call the fixture tool"}
+{"ts":1789369461564,"trace":"-","type":"llm_response","agent":"端到端观测","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_fixture_1\",\"type\":\"function\",\"function\":{\"name\":\"fixture_echo\",\"arguments\":\"{\\\"text\\\":\\\"ping\\\"}\"}}]}"}
+{"ts":1789369461564,"trace":"-","type":"tool_call","agent":"端到端观测","detail":"fixture_echo({\"text\":\"ping\"})"}
+{"ts":1789369461564,"trace":"-","type":"tool_result","agent":"端到端观测","detail":"fixture_echo → fixture-result"}
+{"ts":1789369461565,"trace":"-","type":"llm_response","agent":"端到端观测","detail":"tool-finished"}
+{"ts":1789369461565,"trace":"-","type":"usage","agent":"端到端观测","detail":"{\"prompt\":4,\"completion\":1,\"total\":5}"}
+{"ts":1789369461565,"trace":"-","type":"done","agent":"端到端观测","detail":"tool-finished"}
+PASS agent 跑通
+树: {"run":"a1536b5b-35f2-4ed1-b0c6-5da725e8636b","agent":"端到端观测","start":1789369461559,"ms":6,"live":0,"tokens":11,"cost":0,"spans":[{"i":0,"p":-1,"t":"agent","n":"agent","d":0,"o":0,"ms":6,"tok":0,"cost":0,"st":1},{"i":1,"p":0,"t":"turn","n":"turn","d":1,"o":0,"ms":6,"tok":0,"cost":0,"st":1},{"i":2,"p":1,"t":"llm","n":"step-0","d":2,"o":1,"ms":4,"tok":6,"cost":0,"st":1},{"i":3,"p":1,"t":"tool","n":"fixture_echo","d":2,"o":5,"ms":0,"tok":0,"cost":0,"st":1},{"i":4,"p":1,"t":"llm","n":"step-1","d":2,"o":5,"ms":1,"tok":5,"cost":0,"st":1}]}
+PASS 树是合法 JSON
+PASS 代理名对
+PASS 运行已结束
+PASS 5 个跨度：agent+turn+llm+tool+llm
+PASS 所有跨度都收了尾
+PASS 只有一个根跨度
+PASS 工具跨度显示的是工具名而不是步骤编号
+PASS llm 跨度带 provider 返回的真实 token
+PASS 整棵树的 token 合计非零
+PASS 摘要里一条运行
+PASS 摘要里的跨度数对得上
+PASS 摘要里有耗时
+
+通过 13，失败 0
+==> passed: observability end-to-end (3s)
+
+==> suite: observability dashboard
+PASS 看板页返回 200
+PASS 标题用的是设置的那个
+PASS 有 LiveView 挂载点
+PASS 带上了实时运行时
+PASS 带上了定时刷新脚本
+PASS 左栏列出了这次运行
+PASS 瀑布图上显示的是工具名
+PASS 画出了瀑布条
+PASS 至少 4 条（agent/turn/llm/tool）
+PASS 没有条超出轨道右边界
+PASS 再快的跨度也有最小可见宽度
+PASS llm/tool 分别着色
+PASS /metrics 返回 200
+PASS /metrics 有 harness_agent_runs_total
+PASS /metrics 有 harness_llm_calls_total
+PASS /metrics 有 harness_llm_duration_seconds
+PASS /metrics 有 harness_llm_tokens_total
+PASS /metrics 有 harness_tool_calls_total
+PASS /metrics 有 harness_tool_duration_seconds
+PASS LLM 时延是直方图
+PASS LLM 直方图用的是慢桶（有 ≥60s 的桶）
+PASS 工具指标带 tool 标签
+PASS token 计数非零
+PASS 指标标签里没有 run id（高基数）
+PASS 连上就收到一帧初始渲染
+PASS 初始帧里有运行记录
+PASS 刷新事件能拿到下行帧
+PASS 页面里有可点的运行项
+PASS 选运行能拿到下行帧
+
+通过 29，失败 0
+==> passed: observability dashboard (6s)
+
+==> suite: tool pipeline
+PASS valid_dispatch
+PASS unknown_tool
+PASS invalid_json
+PASS json_array_rejected
+PASS handler_error
+PASS missing_required
+PASS wrong_primitive_type
+PASS enum_rejected
+PASS nested_object
+PASS nested_array
+PASS additional_property
+PASS valid_nested
+PASS invalid_handler_not_reached
+PASS validation_before_hook
+PASS invalid_before_hook_not_reached
+PASS hook_order
+PASS default_mode
+PASS serial_metadata
+PASS metadata_preserves_hooks
+==> passed: tool pipeline (3s)
+
+==> suite: skills
+PASS 解析/name 不被 description 里的 name: 干扰
+PASS 解析/description 取整行
+PASS 解析/正文
+PASS 解析/双引号值去引号
+PASS 解析/单引号值去引号
+PASS 解析/> 折叠多行
+PASS 解析/allowed-tools 逗号空格混合
+PASS 解析/| 保留换行
+PASS 解析/无 frontmatter 名称为空
+PASS 解析/无 frontmatter 全文为正文
+PASS 解析/未闭合不算 frontmatter
+PASS 解析/只认首个块
+PASS 解析/正文保留后续 ---
+PASS 解析/CRLF 名称
+PASS 解析/CRLF 正文
+PASS 解析/username 不算 name
+PASS 技能库/清单含海盗腔
+PASS 技能库/清单含报表（折叠描述）
+PASS 技能库/清单不含正文
+PASS 技能库/无 frontmatter 的目录被跳过
+PASS 技能库/系统提示保留原提示
+PASS 技能库/系统提示注入清单
+PASS 技能库/系统提示不含正文
+PASS load_skill/首次返回正文
+PASS load_skill/列出 references
+PASS load_skill/列出 scripts
+PASS load_skill/不列 SKILL.md 自身
+PASS load_skill/已加载标记
+PASS load_skill/第二次只回短句
+PASS load_skill/第二次不再灌正文
+PASS load_skill/未知技能报错
+PASS load_skill/未知技能列出可用
+PASS load_skill/建议工具
+PASS load_skill/列出 assets
+PASS read_skill_file/读到内容
+PASS read_skill_file/拒绝 ..
+PASS read_skill_file/拒绝绝对路径
+PASS read_skill_file/拒绝 ~
+PASS read_skill_file/不存在
+PASS read_skill_file/目录不算文件
+PASS read_skill_file/未知技能
+PASS read_skill_file/超限截断注明
+PASS read_skill_file/截断长度在 256KB 附近
+PASS 技能库/叠加后描述被覆盖
+PASS 技能库/叠加后旧描述消失
+PASS 技能库/叠加后报表仍在
+PASS load_skill/覆盖后可重新加载新正文
+PASS 白名单/收窄前全放行
+PASS 白名单/allowed-tools 放行
+PASS 白名单/技能库工具放行
+PASS 白名单/其他拒绝
+PASS 白名单/无 allowed-tools 不改
+PASS 多代理/第二个代理首次仍给正文
+PASS 多代理/第一个代理的加载状态不受影响
+全部通过
+[技能] examples/技能/技能库/无名/SKILL.md 没有 frontmatter name，跳过
+[技能] 技能「海盗腔」重名，以 examples/技能/技能库2/海盗腔 覆盖 examples/技能/技能库/海盗腔
+[技能] examples/技能/技能库/无名/SKILL.md 没有 frontmatter name，跳过
+==> passed: skills (2s)
+
+==> suite: MCP resources/prompts equip
+{"ts":1789369475391,"trace":"-","type":"done","agent":"MCP装备测","detail":"装备 MCP 工具 1 个"}
+{"ts":1789369475392,"trace":"-","type":"done","agent":"MCP装备测","detail":"装备 MCP 资源工具：mcp_list_resources, mcp_read_resource"}
+{"ts":1789369475399,"trace":"-","type":"done","agent":"MCP装备测","detail":"装备 MCP 提示工具 2 个"}
+PASS 全部/工具仍走 MCP
+PASS 资源/列出含 uri
+PASS 资源/列出含第二个
+PASS 资源/读取文本
+PASS 资源/缺 uri 被 schema 拦下
+PASS 资源/server 错误透传
+PASS 资源/server 错误消息
+PASS 提示/greet 注册成 prompt_greet
+PASS 提示/中文名 ASCII 安全化
+PASS 提示/参数填进模板
+PASS 提示/数组 content 拼接
+PASS 提示/description 带上
+PASS 提示/内部键没外泄
+PASS 提示/required 参数缺失被 schema 拦下
+PASS 提示/中文名 prompt 可调
+PASS 多服务/第二连接成功
+{"ts":1789369475474,"trace":"-","type":"done","agent":"MCP装备测","detail":"装备 MCP 资源工具：mcp_list_resources_2, mcp_read_resource_2"}
+{"ts":1789369475482,"trace":"-","type":"done","agent":"MCP装备测","detail":"装备 MCP 提示工具 2 个"}
+PASS 多服务/资源工具带 _2 后缀
+PASS 多服务/读资源工具带 _2 后缀
+PASS 多服务/提示工具带 _2 后缀
+PASS 多服务/第二连接可用
+PASS 多服务/第二连接的 prompt 走对了原名
+全部通过
+==> passed: MCP resources/prompts equip (3s)
+
+==> suite: intent and reasoning order
+测试 分类提示词的六条要求 ... 通过 (0ms)
+测试 两级分类 ... 通过 (1ms)
+测试 推理顺序 = 字段顺序 ... 通过 (0ms)
+测试 八段结构 ... 通过 (0ms)
+测试 重试时带上次错误 ... 通过 (0ms)
+测试 现成的图语句提示 ... 通过 (0ms)
+测试 类别名单校验 ... 通过 (0ms)
+
+测试结果: 7 通过 / 0 失败，共 7 个测试（断言 61/0）
+结果: ok
+{"ts":1789369481637,"trace":"-","type":"llm_call","agent":"展示型意图","detail":"下面是一个用户问题。判断它最适合用哪种形式呈现结果。只选一种。\n\n## 可选类别\n- **关系图**：问的是实体之间怎么连、谁跟谁有关系\n- **表格**：问的是聚合、排序、统计，答案是一批带字段的记录\n- **图表**：问的是分布、趋势、比例这类要画出来的东西\n- **地图**：问的是位置、地点，或带强地理属性的实体\n- **关系图**（兜底）：看不出明确偏好时按关系图给，它信息量最全 看不出属于以上任何一类时用它，**不要硬套**。\n\n## 例子\n\n问：按辖区统计各类犯罪的数量\n答：{\"类别\":\"表格\",\"理由\":\"要的是聚合结果\"}\n\n问：跟 Morse 探长经办的案子有牵连的人\n答：{\"类别\":\"关系图\",\"理由\":\"问的是实体与关系\"}\n\n问：近三年交通事故的月度趋势\n答：{\"类别\":\"图表\",\"理由\":\"要看的是分布随时间的变化\"}\n\n问：最近一周哪些摄像头拍到过红色 Camaro\n答：{\"类别\":\"地图\",\"理由\":\"摄像头带位置，落在地图上最直观\"}\n\n问：涉及人口贩运的有组织犯罪类型主要有哪几种\n答：{\"类别\":\"关系图\",\"理由\":\"虽然带「有哪几种」的聚合味，但重点是犯罪类型与人口贩运之间的关联\"}\n（这一条卡在两类之间，注意体会分界。）\n\n## 待分类\n问：谁依赖 KV？\n\n\n严格要求：只输出一个 JSON 对象，不要任何解释、不要代码块标记（``` 也不要）。该 JSON 对象必须包含以下字段：\"类别\", \"理由\"。"}
+{"ts":1789369481641,"trace":"-","type":"llm_response","agent":"展示型意图","detail":"{\"类别\": \"表格\", \"理由\": \"要的是一批包，适合列成表\"}"}
+{"ts":1789369481641,"trace":"-","type":"done","agent":"展示型意图","detail":"{\"类别\": \"表格\", \"理由\": \"要的是一批包，适合列成表\"}"}
+{"ts":1789369481641,"trace":"-","type":"llm_call","agent":"问题种类","detail":"你要给一个知识图谱问答系统的用户提问分类，判断它该由哪条链路处理。\n\n## 可选类别\n- **数据相关**：要从知识图谱里查具体信息的问题\n- **系统相关**：问的是系统本身的功能、特性、结构或设计，答案在文档或模式里，不在数据里\n    - 子类别 **文档相关**：看用户手册、帮助页就能答的\n    - 子类别 **模式相关**：要理解图谱的结构（有哪些类、哪些关系）才能答的\n  （归到这一类时**必须**再给出子类别。）\n- **反馈与抱怨**：系统答不了的，或者本身就是意见、抱怨、改进请求\n- **反馈与抱怨**（兜底）：既不是查数据也不是问系统时归到这里 看不出属于以上任何一类时用它，**不要硬套**。\n\n选中的类别没有子类别时，子类别 一栏填 `无`（不要留空、不要给 null）。\n\n## 例子\n\n问：能把数据导成 CSV 吗？\n答：{\"类别\":\"系统相关\",\"子类别\":\"文档相关\",\"理由\":\"问的是系统有没有导出能力，属于功能说明\"}\n\n问：我要怎么用系统评估某个嫌疑人的风险等级？\n答：{\"类别\":\"系统相关\",\"子类别\":\"模式相关\",\"理由\":\"要先知道图里跟风险有关的结构才答得上\"}\n\n问：上个月哪个辖区的入室盗窃最多？\n答：{\"类别\":\"数据相关\",\"理由\":\"直接查数据就能答\"}\n\n问：系统怎么老是不响应？\n答：{\"类别\":\"反馈与抱怨\",\"理由\":\"这是对性能的抱怨，不是在要数据\"}\n\n问：知识图谱多久更新一次？\n答：{\"类别\":\"系统相关\",\"理由\":\"问的是更新频率这个系统特性，不是图里的数据本身（小模型常误判成数据相关）\"}\n（这一条卡在两类之间，注意体会分界。）\n\n## 待分类\n问：能把数据导出成 CSV 吗？\n\n\n严格要求：只输出一个 JSON 对象，不要任何解释、不要代码块标记（``` 也不要）。该 JSON 对象必须包含以下字段：\"类别\", \"子类别\", \"理由\"。"}
+{"ts":1789369481642,"trace":"-","type":"llm_response","agent":"问题种类","detail":"{\"类别\": \"系统相关\", \"子类别\": \"文档相关\", \"理由\": \"问的是导出能力，属于功能说明\"}"}
+{"ts":1789369481642,"trace":"-","type":"done","agent":"问题种类","detail":"{\"类别\": \"系统相关\", \"子类别\": \"文档相关\", \"理由\": \"问的是导出能力，属于功能说明\"}"}
+测试 意图先行 ... 通过 (7ms)
+{"ts":1789369481644,"trace":"-","type":"llm_call","agent":"展示型意图","detail":"下面是一个用户问题。判断它最适合用哪种形式呈现结果。只选一种。\n\n## 可选类别\n- **关系图**：问的是实体之间怎么连、谁跟谁有关系\n- **表格**：问的是聚合、排序、统计，答案是一批带字段的记录\n- **图表**：问的是分布、趋势、比例这类要画出来的东西\n- **地图**：问的是位置、地点，或带强地理属性的实体\n- **关系图**（兜底）：看不出明确偏好时按关系图给，它信息量最全 看不出属于以上任何一类时用它，**不要硬套**。\n\n## 例子\n\n问：按辖区统计各类犯罪的数量\n答：{\"类别\":\"表格\",\"理由\":\"要的是聚合结果\"}\n\n问：跟 Morse 探长经办的案子有牵连的人\n答：{\"类别\":\"关系图\",\"理由\":\"问的是实体与关系\"}\n\n问：近三年交通事故的月度趋势\n答：{\"类别\":\"图表\",\"理由\":\"要看的是分布随时间的变化\"}\n\n问：最近一周哪些摄像头拍到过红色 Camaro\n答：{\"类别\":\"地图\",\"理由\":\"摄像头带位置，落在地图上最直观\"}\n\n问：涉及人口贩运的有组织犯罪类型主要有哪几种\n答：{\"类别\":\"关系图\",\"理由\":\"虽然带「有哪几种」的聚合味，但重点是犯罪类型与人口贩运之间的关联\"}\n（这一条卡在两类之间，注意体会分界。）\n\n## 待分类\n问：谁依赖 KV？\n\n\n严格要求：只输出一个 JSON 对象，不要任何解释、不要代码块标记（``` 也不要）。该 JSON 对象必须包含以下字段：\"类别\", \"理由\"。"}
+{"ts":1789369481645,"trace":"-","type":"llm_response","agent":"展示型意图","detail":"{\"类别\": \"表格\", \"理由\": \"要的是一批包，适合列成表\"}"}
+{"ts":1789369481645,"trace":"-","type":"done","agent":"展示型意图","detail":"{\"类别\": \"表格\", \"理由\": \"要的是一批包，适合列成表\"}"}
+{"ts":1789369481646,"trace":"-","type":"llm_call","agent":"文本转查询","detail":"你要把用户的自然语言问题翻译成一条 qi-graph 的图查询语句。只用下面模式里真实存在的类、关系和属性。\n\n问题：谁依赖 KV？\n\n## 图模式\n共 5 个节点、4 条边。\n\n### 节点类\n(:包 {下载数: INTEGER, 版本: STRING})   共 5 个\n\n### 关系\n(:包)-[:依赖]->(:包)   共 3 条\n(:包)-[:开发依赖]->(:包)   共 1 条\n\n### 怎么查\n用 查(图, 语句)。语法（方括号是可选）：\n  匹配 路径 [, 路径]*\n  [其中 条件 [且 条件]*]\n  [返回 变量 [, 变量]*]\n  [限制 N]\n路径写成 (节点)-[:边类型]->(节点)，可以串下去；`?x` 开头是变量，其余是常量 id。\n节点可以带标签约束 (?x:某个类)；反向边写 <-[:边类型]-；类型留空 -[]-> 表示任意。\n条件写 ?变量.属性 运算 值，运算支持 > >= < <= = != 包含。\n例：\n  匹配 (?人:人)-[:认识]->(?友:人)-[:住在]->(成都)\n  其中 ?人.年龄 > 30\n  返回 ?人, ?友\n  限制 10\n结果是 [{\"?人\":\"张三\",\"?友\":\"李四\"}, …]；语法错会回 {\"错\":\"…\"}，照着改就行。\n**把带常量的路径写在前面** —— 两端都是变量且类型也不定时会扫全库。\n\n\n### 这次要什么\n用户想要的呈现形式：表格\n结果要能列成表，用 返回 只留必要的变量。\n\n### 例子\n\n问：谁依赖 KV？\n答：{\"关系\": [\"依赖\"], \"推理\": \"问的是「谁依赖 X」，方向是从依赖方指向被依赖方，所以 KV 在箭头右边，左边留变量。\", \"查询\": \"匹配 (?p:包)-[:依赖]->(KV) 返回 ?p\"}\n\n问：Harness 间接依赖了哪些包？\n答：{\"关系\": [\"依赖\"], \"推理\": \"「间接」意味着两跳，把路径串起来写成 (Harness)-[:依赖]->(?a)-[:依赖]->(?b)，要的是 ?b。\", \"查询\": \"匹配 (Harness)-[:依赖]->(?a)-[:依赖]->(?b) 返回 ?b\"}\n\n问：下载量超过一百的包里，谁被别人依赖了？\n答：{\"关系\": [\"依赖\"], \"推理\": \"两个条件：被依赖（有入边）+ 下载数 > 100。条件写在 其中 里，属性名照模式里的写。\", \"查询\": \"匹配 (?a:包)-[:依赖]->(?b:包) 其中 ?b.下载数 > 100 返回 ?b\"}\n\n### 这张图要注意的\n- 边的方向是「依赖方 → 被依赖方」，问「谁依赖 X」时 X 在右边\n- 把带常量的路径写在前面，两端都是变量且类型也不定时会扫全库\n\n### 再说一遍：要回答的问题\n谁依赖 KV？\n\n### 输出格式\n先在 关系 里列出你打算走的边类型（不需要走边就给空数组），再用 推理 当草稿纸写出你的思路，最后才给 查询。**按这个顺序写**。\n查不出来就在 推理 里说清为什么，查询 给空串 —— 不要编造模式里没有的类或关系。\n\n\n严格要求：只输出一个 JSON 对象，不要任何解释、不要代码块标记（``` 也不要）。该 JSON 对象必须包含以下字段：\"关系\", \"推理\", \"查询\"。"}
+{"ts":1789369481646,"trace":"-","type":"llm_response","agent":"文本转查询","detail":"{\"关系\": [\"依赖\"], \"推理\": \"问的是「谁依赖 KV」，依赖边从依赖方指向被依赖方，所以 KV 在箭头右边，左边留一个带 包 标签的变量；意图是表格，用 返回 只留这个变量。\", \"查询\": \"匹配 (?p:包)-[:依赖]->(KV) 返回 ?p\"}"}
+{"ts":1789369481646,"trace":"-","type":"done","agent":"文本转查询","detail":"{\"关系\": [\"依赖\"], \"推理\": \"问的是「谁依赖 KV」，依赖边从依赖方指向被依赖方，所以 KV 在箭头右边，左边留一个带 包 标签的变量；意图是表格，用 返回 只留这个变量。\", \"查询\": \"匹配 (?p:包)-[:依赖]->(KV) 返回 ?p\"}"}
+测试 端到端：意图→模式→查询→真答案 ... 通过 (4ms)
+测试 模式确实进了提示词 ... 通过 (2ms)
+
+测试结果: 3 通过 / 0 失败，共 3 个测试（断言 20/0）
+结果: ok
+==> passed: intent and reasoning order (6s)
+
+==> suite: graph memory
+PASS 打开图记忆
+PASS 图记忆可用
+PASS 空库条数
+PASS 关联/首次
+PASS 关联/自动建两端实体后 1 条边
+PASS 关联/自动建了两个实体
+PASS 关联/重复调用仍返回 1
+PASS 关联/幂等：没长出第二条边
+PASS 关联/不同关系是另一条边
+PASS 关联/两条边
+PASS 冒号名/能被当关键词查到
+PASS 冒号名/展示的是原名不是十六进制
+PASS 冒号名/格式对齐
+PASS 建图/边数
+PASS 一跳/研究员两条出边
+PASS 一跳/用过 mcp:fetch
+PASS 一跳/用过 计算器
+PASS 一跳/不含两跳外的边
+PASS 默认跳数/带出二度边
+PASS 一跳/格式对齐
+PASS 两跳/走到 mcp:fetch 的下一跳
+PASS 两跳/走到 计算器 的入边
+PASS 两跳/共四条边
+PASS 两跳/格式对齐
+PASS 三跳/走到 报告器 → 分析师
+PASS 三跳/全部五条边
+PASS 多关键词/合并去重后三条
+PASS 多关键词/含第二个种子的边
+PASS 多关键词/格式对齐
+PASS 多关键词/中文逗号同样认
+PASS 没命中/未知关键词返回空串
+PASS 没命中/空关键词返回空串
+PASS 上限/1 条
+PASS 上限/2 条
+PASS 怎么连的/有路径
+PASS 怎么连的/自己到自己
+PASS 怎么连的/无路径
+PASS 怎么连的/端点不在图里
+PASS 怎么连的/格式对齐
+PASS 按关系/用过 三条
+PASS 按关系/含分析师那条
+PASS 按关系/格式对齐
+PASS 按关系/上限生效
+PASS 按关系/没有这个关系
+PASS 统计/available
+PASS 统计/relations
+PASS 统计/entities
+PASS 坏句柄/可用
+PASS 坏句柄/条数
+PASS 坏句柄/图回忆
+PASS 坏句柄/怎么连的
+PASS 坏句柄/关联
+PASS 空名字/记实体
+PASS 空关系/关联
+PASS 重开/边数还在
+PASS 重开/召回照旧
+PASS 重开/冒号名还在
+PASS 重开/幂等仍成立
+PASS 重开/没长出重复边
+图记忆 全部通过
+PASS 未启用图记忆/句柄为 0
+PASS 未启用图记忆/记关联返回 0
+{"ts":1789369488531,"trace":"-","type":"memory_recall","agent":"只词法","detail":"-【偏好】用户喜欢简短回答"}
+{"ts":1789369488531,"trace":"-","type":"llm_call","agent":"只词法","detail":"## 相关记忆与过往经验\n-【偏好】用户喜欢简短回答\n(参考以上背景作答)\n\n只有词法这一路"}
+{"ts":1789369488533,"trace":"-","type":"retry","agent":"只词法","detail":"试次 1 可重试错误，延迟 100 ms"}
+{"ts":1789369488642,"trace":"-","type":"retry","agent":"只词法","detail":"试次 2 可重试错误，延迟 200 ms"}
+{"ts":1789369488853,"trace":"-","type":"error","agent":"只词法","detail":"智能重试 3 次全部失败"}
+{"ts":1789369488853,"trace":"-","type":"llm_response","agent":"只词法","detail":"工具对话失败: HTTP请求失败: error sending request for url (http://127.0.0.1:43519/v1/chat/completions)（根因: client error (Connect)）"}
+PASS 启用图记忆/拿到句柄
+PASS 记关联/成功
+PASS 记关联/幂等
+PASS 记关联/落到库里就一条
+PASS 关联/直接对句柄写也算数
+{"ts":1789369488855,"trace":"-","type":"memory_recall","agent":"双路","detail":"-【偏好】用户喜欢简短回答"}
+{"ts":1789369488855,"trace":"-","type":"graph_recall","agent":"双路","detail":"-【用过】研究员 → mcp:fetch\n-【能取】mcp:fetch → 网页"}
+{"ts":1789369488855,"trace":"-","type":"llm_call","agent":"双路","detail":"## 相关记忆与过往经验\n-【偏好】用户喜欢简短回答\n-【用过】研究员 → mcp:fetch\n-【能取】mcp:fetch → 网页\n(参考以上背景作答)\n\n两路都要"}
+{"ts":1789369488855,"trace":"-","type":"retry","agent":"双路","detail":"试次 1 可重试错误，延迟 100 ms"}
+{"ts":1789369488961,"trace":"-","type":"retry","agent":"双路","detail":"试次 2 可重试错误，延迟 200 ms"}
+{"ts":1789369489171,"trace":"-","type":"error","agent":"双路","detail":"智能重试 3 次全部失败"}
+{"ts":1789369489171,"trace":"-","type":"llm_response","agent":"双路","detail":"工具对话失败: HTTP请求失败: error sending request for url (http://127.0.0.1:43519/v1/chat/completions)（根因: client error (Connect)）"}
+{"ts":1789369489171,"trace":"-","type":"llm_call","agent":"双路","detail":"谁都不该命中"}
+{"ts":1789369489172,"trace":"-","type":"retry","agent":"双路","detail":"试次 1 可重试错误，延迟 100 ms"}
+{"ts":1789369489280,"trace":"-","type":"circuit_open","agent":"熔断","detail":"连续失败 5 次，断路打开 30000ms"}
+{"ts":1789369489280,"trace":"-","type":"retry","agent":"双路","detail":"试次 2 可重试错误，延迟 200 ms"}
+{"ts":1789369489490,"trace":"-","type":"error","agent":"双路","detail":"熔断打开，快失败（冷却中）"}
+{"ts":1789369489490,"trace":"-","type":"llm_response","agent":"双路","detail":"[harness] 熔断打开，请求被快失败"}
+三路合并 全部通过
+PASS 注入/只词法那一路
+PASS 注入/两路合并成一个块
+PASS 注入/都没命中就不注入
+PASS 注入/没命中时没有标题块
+图记忆套件通过
+==> passed: graph memory (8s)
+
+==> suite: MCP HTTP transport
+PASS 客户端/initialize + notifications/initialized 成功
+PASS 客户端/tools/list 含 add
+PASS 客户端/tools/list 含 inputSchema
+PASS 客户端/tools/list 含 echo
+PASS 客户端/tools/call add = 42
+PASS 客户端/tools/call echo 中文
+PASS 客户端/ping
+PASS 客户端/未知方法 -32601
+PASS 客户端/未知工具 -32602
+PASS 客户端/多字节参数完整
+PASS 客户端/关闭（DELETE）
+PASS 协议/initialize 200
+PASS 协议/initialize Content-Type json
+PASS 协议/initialize 回 protocolVersion
+PASS 协议/initialize 回 serverInfo
+PASS 协议/字符串 id 原样回
+PASS 协议/initialize 签发 Mcp-Session-Id
+PASS 协议/通知 202
+PASS 协议/带会话 tools/list 200
+PASS 协议/整数 id 原样回
+PASS 协议/缺 Mcp-Session-Id 400
+PASS 协议/未知会话 404
+PASS 协议/坏 JSON 400 + -32700
+PASS 协议/批量请求 400
+PASS 协议/GET 405
+PASS 协议/GET 带 Allow 头
+PASS 协议/OPTIONS 204
+PASS 协议/DELETE 200
+PASS 协议/DELETE 后会话 404
+PASS 协议/重复 DELETE 404
+PASS 客户端/第二个会话 add
+全部通过
+[MCP服务] Streamable HTTP 监听 http://127.0.0.1:41963/mcp
+==> passed: MCP HTTP transport (3s)
+
+==> suite: tool scheduling
+{"ts":1789369495247,"trace":"-","type":"llm_call","agent":"parallel-scheduling-test","detail":"run parallel tools"}
+{"ts":1789369495251,"trace":"-","type":"llm_response","agent":"parallel-scheduling-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"slow_a\",\"arguments\":\"{\\\"index\\\": 0}\"}},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"slow_b\",\"arguments\":\"{\\\"index\\\": 1}\"}}]}"}
+{"ts":1789369495251,"trace":"-","type":"tool_call","agent":"parallel-scheduling-test","detail":"slow_a({\"index\": 0})"}
+{"ts":1789369495251,"trace":"-","type":"tool_call","agent":"parallel-scheduling-test","detail":"slow_b({\"index\": 1})"}
+{"ts":1789369495560,"trace":"-","type":"tool_result","agent":"parallel-scheduling-test","detail":"slow_a → result-A"}
+{"ts":1789369495561,"trace":"-","type":"tool_result","agent":"parallel-scheduling-test","detail":"slow_b → result-B"}
+{"ts":1789369495562,"trace":"-","type":"llm_response","agent":"parallel-scheduling-test","detail":"parallel-aligned"}
+{"ts":1789369495562,"trace":"-","type":"usage","agent":"parallel-scheduling-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369495562,"trace":"-","type":"done","agent":"parallel-scheduling-test","detail":"parallel-aligned"}
+PASS parallel_results_aligned
+PASS parallel_tools_overlap_measurably
+PASS parallel_lifecycle_events
+{"ts":1789369495562,"trace":"-","type":"llm_call","agent":"serial-scheduling-test","detail":"run serial tools"}
+{"ts":1789369495563,"trace":"-","type":"llm_response","agent":"serial-scheduling-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"serial_a\",\"arguments\":\"{\\\"index\\\": 0}\"}},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"serial_b\",\"arguments\":\"{\\\"index\\\": 1}\"}}]}"}
+{"ts":1789369495563,"trace":"-","type":"tool_call","agent":"serial-scheduling-test","detail":"serial_a({\"index\": 0})"}
+{"ts":1789369495823,"trace":"-","type":"tool_result","agent":"serial-scheduling-test","detail":"serial_a → serial-A"}
+{"ts":1789369495823,"trace":"-","type":"tool_call","agent":"serial-scheduling-test","detail":"serial_b({\"index\": 1})"}
+{"ts":1789369495823,"trace":"-","type":"tool_result","agent":"serial-scheduling-test","detail":"serial_b → serial-B"}
+{"ts":1789369495824,"trace":"-","type":"llm_response","agent":"serial-scheduling-test","detail":"serial-aligned"}
+{"ts":1789369495824,"trace":"-","type":"usage","agent":"serial-scheduling-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369495824,"trace":"-","type":"done","agent":"serial-scheduling-test","detail":"serial-aligned"}
+PASS serial_results_aligned
+PASS serial_declaration_prevents_overlap_and_order_violation
+PASS serial_lifecycle_events
+{"ts":1789369495824,"trace":"-","type":"llm_call","agent":"controlled-scheduling-test","detail":"run controlled tools"}
+{"ts":1789369495825,"trace":"-","type":"llm_response","agent":"controlled-scheduling-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"controlled_a\",\"arguments\":\"{\\\"index\\\": 0}\"}},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"controlled_b\",\"arguments\":\"{\\\"index\\\": 1}\"}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"controlled_serial\",\"arguments\":\"{\\\"index\\\": 2}\"}},{\"id\":\"call_3\",\"type\":\"function\",\"function\":{\"name\":\"controlled_c\",\"arguments\":\"{\\\"index\\\": 3}\"}},{\"id\":\"call_4\",\"type\":\"function\",\"function\":{\"name\":\"controlled_d\",\"arguments\":\"{\\\"index\\\": 4}\"}}]}"}
+{"ts":1789369495826,"trace":"-","type":"tool_call","agent":"controlled-scheduling-test","detail":"controlled_a({\"index\": 0})"}
+{"ts":1789369495826,"trace":"-","type":"tool_call","agent":"controlled-scheduling-test","detail":"controlled_b({\"index\": 1})"}
+{"ts":1789369496006,"trace":"-","type":"tool_result","agent":"controlled-scheduling-test","detail":"controlled_a → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"controlled-A\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496014,"trace":"-","type":"tool_result","agent":"controlled-scheduling-test","detail":"controlled_b → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"controlled-B\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496014,"trace":"-","type":"tool_call","agent":"controlled-scheduling-test","detail":"controlled_serial({\"index\": 2})"}
+{"ts":1789369496104,"trace":"-","type":"tool_result","agent":"controlled-scheduling-test","detail":"controlled_serial → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"controlled-serial\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496105,"trace":"-","type":"tool_call","agent":"controlled-scheduling-test","detail":"controlled_c({\"index\": 3})"}
+{"ts":1789369496215,"trace":"-","type":"tool_result","agent":"controlled-scheduling-test","detail":"controlled_c → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"controlled-C\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496215,"trace":"-","type":"tool_call","agent":"controlled-scheduling-test","detail":"controlled_d({\"index\": 4})"}
+{"ts":1789369496215,"trace":"-","type":"tool_result","agent":"controlled-scheduling-test","detail":"controlled_d → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"controlled-D\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496216,"trace":"-","type":"llm_response","agent":"controlled-scheduling-test","detail":"controlled-aligned"}
+{"ts":1789369496216,"trace":"-","type":"usage","agent":"controlled-scheduling-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496216,"trace":"-","type":"done","agent":"controlled-scheduling-test","detail":"controlled-aligned"}
+PASS controlled_results_preserve_call_order
+PASS controlled_serial_barrier_and_concurrency_key_prevent_overlap
+PASS controlled_lifecycle_reflects_actual_wave_completion
+{"ts":1789369496216,"trace":"-","type":"llm_call","agent":"controlled-status-test","detail":"projection and cancellation"}
+{"ts":1789369496217,"trace":"-","type":"llm_response","agent":"controlled-status-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"legacy_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"cancelled_controlled\",\"arguments\":\"{\\\"index\\\": 1}\"}}]}"}
+{"ts":1789369496217,"trace":"-","type":"tool_call","agent":"controlled-status-test","detail":"legacy_controlled({\"index\": 0})"}
+{"ts":1789369496217,"trace":"-","type":"tool_result","agent":"controlled-status-test","detail":"legacy_controlled → legacy-visible:{\"index\": 0}"}
+{"ts":1789369496217,"trace":"-","type":"tool_call","agent":"controlled-status-test","detail":"cancelled_controlled({\"index\": 1})"}
+{"ts":1789369496217,"trace":"-","type":"tool_result","agent":"controlled-status-test","detail":"cancelled_controlled → {\"version\":1,\"status\":\"cancelled\",\"content_type\":\"none\",\"content\":\"\",\"error_code\":\"cancelled\",\"error_message\":\"operator\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496218,"trace":"-","type":"llm_response","agent":"controlled-status-test","detail":"controlled-status-aligned"}
+{"ts":1789369496218,"trace":"-","type":"usage","agent":"controlled-status-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496218,"trace":"-","type":"done","agent":"controlled-status-test","detail":"controlled-status-aligned"}
+PASS controlled_legacy_projection_and_cancel_status
+{"ts":1789369496218,"trace":"-","type":"llm_call","agent":"controlled-timeout-test","detail":"cooperative timeout"}
+{"ts":1789369496219,"trace":"-","type":"llm_response","agent":"controlled-timeout-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"timeout_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496219,"trace":"-","type":"tool_call","agent":"controlled-timeout-test","detail":"timeout_controlled({\"index\": 0})"}
+{"ts":1789369496303,"trace":"-","type":"tool_result","agent":"controlled-timeout-test","detail":"timeout_controlled → {\"version\":1,\"status\":\"timeout\",\"content_type\":\"none\",\"content\":\"\",\"error_code\":\"timeout\",\"error_message\":\"cooperative deadline exceeded after 20ms\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496304,"trace":"-","type":"llm_response","agent":"controlled-timeout-test","detail":"controlled-timeout-aligned"}
+{"ts":1789369496304,"trace":"-","type":"usage","agent":"controlled-timeout-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496304,"trace":"-","type":"done","agent":"controlled-timeout-test","detail":"controlled-timeout-aligned"}
+PASS controlled_cooperative_timeout_projection
+PASS in_process_timeout_waits_for_cooperative_handler_return
+PASS controlled_timeout_lifecycle_event
+{"ts":1789369496304,"trace":"-","type":"llm_call","agent":"controlled-ambiguous-test","detail":"ambiguous non-idempotent"}
+{"ts":1789369496305,"trace":"-","type":"llm_response","agent":"controlled-ambiguous-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"ambiguous_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496305,"trace":"-","type":"tool_call","agent":"controlled-ambiguous-test","detail":"ambiguous_controlled({\"index\": 0})"}
+{"ts":1789369496305,"trace":"-","type":"tool_result","agent":"controlled-ambiguous-test","detail":"ambiguous_controlled → {\"version\":1,\"status\":\"needs_reconciliation\",\"content_type\":\"none\",\"content\":\"\",\"error_code\":\"ambiguous_outcome\",\"error_message\":\"commit outcome unknown\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496306,"trace":"-","type":"llm_response","agent":"controlled-ambiguous-test","detail":"controlled-ambiguous-aligned"}
+{"ts":1789369496306,"trace":"-","type":"usage","agent":"controlled-ambiguous-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496306,"trace":"-","type":"done","agent":"controlled-ambiguous-test","detail":"controlled-ambiguous-aligned"}
+PASS ambiguous_non_idempotent_needs_reconciliation
+{"ts":1789369496312,"trace":"-","type":"llm_call","agent":"controlled-journal-test","detail":"journal ambiguous outcome"}
+{"ts":1789369496313,"trace":"-","type":"llm_response","agent":"controlled-journal-test","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"ambiguous_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496313,"trace":"-","type":"tool_call","agent":"controlled-journal-test","detail":"ambiguous_controlled({\"index\": 0})"}
+{"ts":1789369496314,"trace":"-","type":"tool_result","agent":"controlled-journal-test","detail":"ambiguous_controlled → {\"version\":1,\"status\":\"needs_reconciliation\",\"content_type\":\"none\",\"content\":\"\",\"error_code\":\"ambiguous_outcome\",\"error_message\":\"commit outcome unknown\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496315,"trace":"-","type":"llm_response","agent":"controlled-journal-test","detail":"controlled-ambiguous-aligned"}
+{"ts":1789369496315,"trace":"-","type":"usage","agent":"controlled-journal-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496315,"trace":"-","type":"done","agent":"controlled-journal-test","detail":"controlled-ambiguous-aligned"}
+PASS controlled_journal_receives_side_effect_idempotency_and_reconciliation
+{"ts":1789369496320,"trace":"-","type":"llm_call","agent":"controlled-replay-1","detail":"first dispatch"}
+{"ts":1789369496320,"trace":"-","type":"llm_response","agent":"controlled-replay-1","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"journal_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496320,"trace":"-","type":"tool_call","agent":"controlled-replay-1","detail":"journal_controlled({\"index\": 0})"}
+{"ts":1789369496321,"trace":"-","type":"tool_result","agent":"controlled-replay-1","detail":"journal_controlled → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"journal-counted\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496322,"trace":"-","type":"llm_response","agent":"controlled-replay-1","detail":"controlled-journal-success-aligned"}
+{"ts":1789369496322,"trace":"-","type":"usage","agent":"controlled-replay-1","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496322,"trace":"-","type":"done","agent":"controlled-replay-1","detail":"controlled-journal-success-aligned"}
+PASS journal_first_dispatch_completes
+{"ts":1789369496322,"trace":"-","type":"llm_call","agent":"controlled-replay-2","detail":"duplicate dispatch"}
+{"ts":1789369496323,"trace":"-","type":"llm_response","agent":"controlled-replay-2","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"journal_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496323,"trace":"-","type":"tool_call","agent":"controlled-replay-2","detail":"journal_controlled({\"index\": 0})"}
+{"ts":1789369496323,"trace":"-","type":"tool_result","agent":"controlled-replay-2","detail":"journal_controlled → {\"version\":1,\"status\":\"success\",\"content_type\":\"text\",\"content\":\"journal-counted\",\"error_code\":\"\",\"error_message\":\"\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496323,"trace":"-","type":"llm_response","agent":"controlled-replay-2","detail":"controlled-journal-success-aligned"}
+{"ts":1789369496323,"trace":"-","type":"usage","agent":"controlled-replay-2","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496323,"trace":"-","type":"done","agent":"controlled-replay-2","detail":"controlled-journal-success-aligned"}
+PASS duplicate_dispatch_replays_without_second_handler_call
+{"ts":1789369496329,"trace":"-","type":"llm_call","agent":"controlled-rejected","detail":"stale dispatch"}
+{"ts":1789369496330,"trace":"-","type":"llm_response","agent":"controlled-rejected","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"journal_controlled\",\"arguments\":\"{\\\"index\\\": 0}\"}}]}"}
+{"ts":1789369496330,"trace":"-","type":"tool_call","agent":"controlled-rejected","detail":"journal_controlled({\"index\": 0})"}
+{"ts":1789369496330,"trace":"-","type":"tool_result","agent":"controlled-rejected","detail":"journal_controlled → {\"version\":1,\"status\":\"failed\",\"content_type\":\"none\",\"content\":\"\",\"error_code\":\"dispatch_not_started\",\"error_message\":\"controlled tool dispatch was not newly recorded\",\"retryable\":false,\"terminate_run\":false,\"metadata\":{}}"}
+{"ts":1789369496330,"trace":"-","type":"llm_response","agent":"controlled-rejected","detail":"controlled-journal-rejected-aligned"}
+{"ts":1789369496330,"trace":"-","type":"usage","agent":"controlled-rejected","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369496330,"trace":"-","type":"done","agent":"controlled-rejected","detail":"controlled-journal-rejected-aligned"}
+PASS record_create_failure_means_handler_count_zero
+==> passed: tool scheduling (4s)
+
+==> suite: run configuration
+所有文件语法检查通过
+所有文件语法检查通过
+PASS default_config_preserves_existing_behavior
+PASS cancellation_explicitly_unsupported
+{"ts":1789369499434,"trace":"-","type":"context_trim","agent":"上下文","detail":"滑窗裁剪 7 → 3 条"}
+{"ts":1789369499434,"trace":"-","type":"llm_call","agent":"run-config-test","detail":"trim-call"}
+{"ts":1789369499443,"trace":"-","type":"llm_response","agent":"run-config-test","detail":"count=4;early=0;recent=1"}
+{"ts":1789369499443,"trace":"-","type":"usage","agent":"run-config-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369499443,"trace":"-","type":"done","agent":"run-config-test","detail":"count=4;early=0;recent=1"}
+PASS automatic_pre_call_sliding_window_trim
+PASS automatic_trim_emits_compaction_event
+PASS per_call_override_does_not_mutate_agent_defaults
+{"ts":1789369499444,"trace":"-","type":"llm_call","agent":"run-config-test","detail":"default-call"}
+{"ts":1789369499446,"trace":"-","type":"llm_response","agent":"run-config-test","detail":"count=8;early=1;recent=1"}
+{"ts":1789369499446,"trace":"-","type":"usage","agent":"run-config-test","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369499446,"trace":"-","type":"done","agent":"run-config-test","detail":"count=8;early=1;recent=1"}
+PASS default_call_does_not_trim_context
+PASS run_config_total_6
+==> passed: run configuration (3s)
+
+==> suite: run context
+所有文件语法检查通过
+所有文件语法检查通过
+PASS run_id_by_handle
+PASS context_a_isolated
+PASS context_b_isolated
+PASS trace_a_isolated
+PASS trace_b_isolated
+PASS turn_counter
+PASS step_counter
+PASS counters_isolated
+PASS current_outer
+PASS legacy_api_outer
+PASS current_nested
+PASS legacy_api_nested
+PASS current_restored
+PASS cleanup_compacts_nested_stack
+PASS cleanup_invalidates
+PASS cleanup_tool_data
+PASS cleanup_trace_data
+PASS agent_borrows_ambient_context
+PASS borrowed_context_restored_not_destroyed
+PASS nested_agent_owns_fresh_context
+PASS nested_agent_restores_outer_context
+PASS overlapping_agent_cleanup_keeps_active_context
+PASS overlapping_agent_contexts_do_not_leak
+{"ts":1789369502408,"trace":"-","type":"llm_call","agent":"outer-agent","detail":"outer request"}
+{"ts":1789369502413,"trace":"-","type":"llm_response","agent":"outer-agent","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call-inner-1\",\"type\":\"function\",\"function\":{\"name\":\"call_inner\",\"arguments\":\"{}\"}}]}"}
+{"ts":1789369502413,"trace":"-","type":"tool_call","agent":"outer-agent","detail":"call_inner({})"}
+{"ts":1789369502414,"trace":"-","type":"llm_call","agent":"inner-agent","detail":"inner request"}
+{"ts":1789369502415,"trace":"-","type":"llm_response","agent":"inner-agent","detail":"inner-finished"}
+{"ts":1789369502415,"trace":"-","type":"usage","agent":"inner-agent","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369502415,"trace":"-","type":"done","agent":"inner-agent","detail":"inner-finished"}
+{"ts":1789369502415,"trace":"-","type":"tool_result","agent":"outer-agent","detail":"call_inner → inner-finished"}
+{"ts":1789369502415,"trace":"-","type":"llm_response","agent":"outer-agent","detail":"outer-finished"}
+{"ts":1789369502416,"trace":"-","type":"usage","agent":"outer-agent","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369502416,"trace":"-","type":"done","agent":"outer-agent","detail":"outer-finished"}
+PASS nested_agent_invocation_result
+PASS nested_agent_invocation_restores_outer
+PASS agent_invocations_leave_no_owned_context
+PASS run_context_total_26
+==> passed: run context (3s)
+
+==> suite: run journal
+PASS journal_opened
+PASS run_created
+PASS idempotent_create_replayed
+PASS request_hash_conflict_rejected
+PASS hash_conflict_preserves_original
+PASS first_lease_fence
+PASS lease_renewed
+PASS live_lease_blocks_other_owner
+PASS expired_lease_increments_fence
+PASS stale_fence_rejected
+PASS first_event_seq
+PASS second_event_seq
+PASS third_event_seq
+PASS monotonic_replay_after_seq
+PASS attempt_created
+PASS attempt_create_idempotent
+PASS non_idempotent_tool_created
+PASS ambiguous_tool_marked
+PASS ambiguous_non_idempotent_tool_requires_reconciliation
+PASS dispatch_boundary_created_new
+PASS dispatch_boundary_is_durable_before_completion
+PASS duplicate_idempotency_key_returns_existing
+PASS fenced_tool_completion_persisted
+PASS completion_boundary_persists_lease_fence
+PASS duplicate_idempotency_key_replays_completed_result
+PASS duplicate_idempotency_key_not_newly_created
+PASS duplicate_completion_cannot_rewrite_terminal_result
+PASS crash_window_dispatch_recorded
+PASS non_idempotent_crash_window_never_redispatches
+PASS tool_dispatch_created_under_lease_fence
+PASS stale_writer_cannot_persist_tool_completion
+PASS budget_reserved
+PASS budget_settled
+PASS duplicate_settlement_idempotent
+PASS different_duplicate_settlement_conflicts
+PASS budget_boundaries_are_transactional_events
+PASS stale_fence_can_conservatively_retain_reservation
+PASS stale_fence_retains_full_reserved_amount
+PASS commit_failure_reported
+PASS transaction_rollback_restores_run_and_event
+PASS lease_released
+PASS released_lease_cannot_renew
+PASS semantic_commit_crash_window_reported
+PASS semantic_commit_boundary_is_transactional
+PASS stale_writer_cannot_terminal_after_takeover
+PASS recovery_terminal_seq
+PASS duplicate_recovery_does_not_add_terminal
+PASS run_journal_total_47
+==> passed: run journal (3s)
+
+==> suite: reliable stream
+PASS success_completed
+PASS success_committed_revision
+PASS pre_output_500_retried_once_and_each_attempt_reserved
+PASS partial_eof_not_retried
+PASS partial_aborted_history
+PASS callback_zero_cancels
+PASS cancel_does_not_commit
+PASS stall_before_first_enforces_and_persists_timeout
+PASS stall_midstream_enforces_idle_timeout
+PASS total_deadline_enforced_while_reading
+PASS duplicate_request_replays_events
+PASS duplicate_commits_history_once
+PASS request_hash_conflict_before_provider
+PASS replay_after_seq
+PASS forged_scope_rejected
+PASS predictable_scope_guesses_rejected
+PASS released_scope_generation_is_stale
+PASS cross_tenant_and_session_replay_rejected
+PASS budget_denied_before_dispatch
+PASS insufficient_reservation_blocks_before_dispatch
+PASS exact_reservation_bound_succeeds
+PASS unknown_usage_retains_conservative_reservation
+PASS stale_run_recovery_is_terminal_and_idempotent
+PASS cross_tenant_and_session_recovery_rejected
+PASS stale_fence_cleans_both_budget_ledgers
+PASS terminal_write_failure_never_reports_completed
+PASS reliable_stream_total_26
+PASS reliable_stream_provider_counts
+PASS reliable_stream_provider_received_max_tokens
+==> passed: reliable stream (3s)
+
+==> suite: controlled tool
+PASS result_serialization
+PASS legacy_projection_and_parallel_policy
+PASS cooperative_cancellation_state
+PASS progress_order_and_terminal_rejection
+PASS side_effect_and_executor_metadata
+PASS deterministic_wave_barrier_and_concurrency_key_planning
+PASS controlled_tools_total_6
+==> passed: controlled tool (2s)
+
+==> suite: session persistence
+PASS storage_opened
+PASS session_created
+PASS initial_entries_appended
+PASS root_to_leaf_path_length
+PASS path_starts_at_root
+PASS path_keeps_middle
+PASS path_ends_at_leaf
+PASS leaf_moved_to_history
+PASS new_branch_path_length
+PASS new_branch_reconstructed
+PASS branching_is_non_destructive
+PASS old_branch_still_selectable
+PASS old_branch_retained
+PASS session_persists_after_reopen
+PASS leaf_persists_after_reopen
+PASS path_persists_after_reopen
+PASS old_branch_persists_after_reopen
+PASS expected_leaf_append_succeeds
+PASS stale_expected_leaf_conflicts
+PASS stale_append_writes_nothing
+PASS fenced_append_succeeds_for_current_owner
+PASS taken_over_fence_rejects_stale_append
+PASS stale_fence_writes_no_entry_or_leaf
+PASS expired_fence_rejects_append
+PASS expired_fence_writes_no_entry_or_leaf
+PASS takeover_branch_written
+PASS takeover_rolls_back_visible_leaf_to_committed_baseline
+PASS takeover_keeps_stale_entries_append_only
+PASS takeover_preserves_completed_request_history
+PASS legacy_zero_fence_takeover_is_noop
+PASS outer_transaction_started
+PASS begin_failure_is_reported
+PASS begin_failure_writes_nothing
+PASS commit_failure_is_reported
+PASS commit_failure_rolls_back_entry_and_leaf
+PASS session_persistence_total_35
+==> passed: session persistence (3s)
+
+==> suite: session export/import
+PASS memory_stores_opened
+PASS export_is_deterministic
+PASS round_trip_import_succeeds
+PASS round_trip_preserves_exact_export
+PASS round_trip_preserves_leaf
+PASS all_branches_and_ids_preserved
+PASS selected_branch_parentage_preserved
+PASS alternate_branch_remains_selectable
+PASS session_collision_is_reported
+PASS collision_does_not_modify_existing_session
+PASS entry_id_collision_is_reported
+PASS entry_collision_does_not_create_partial_session
+PASS malformed_json_is_rejected
+PASS invalid_leaf_reference_is_rejected
+PASS malformed_import_leaves_store_unchanged
+PASS session_export_import_total_15
+==> passed: session export/import (2s)
+
+==> suite: Agent session integration
+PASS reopen_restore_count
+PASS restore_keeps_root_user
+PASS restore_uses_selected_new_branch
+PASS branch_restore_count
+PASS branch_selection_reflected_on_next_restore
+PASS branches_remain_distinct
+PASS image_restore_count
+PASS image_restored_as_multimodal_content
+PASS restore_total_8
+{"ts":1789369521215,"trace":"-","type":"llm_call","agent":"session-recording","detail":"use the fixture tool"}
+{"ts":1789369521220,"trace":"-","type":"llm_response","agent":"session-recording","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_session_1\",\"type\":\"function\",\"function\":{\"name\":\"fixture_tool\",\"arguments\":\"{}\"}}]}"}
+{"ts":1789369521220,"trace":"-","type":"tool_call","agent":"session-recording","detail":"fixture_tool({})"}
+{"ts":1789369521221,"trace":"-","type":"tool_result","agent":"session-recording","detail":"fixture_tool → fixture-result"}
+{"ts":1789369521223,"trace":"-","type":"llm_response","agent":"session-recording","detail":"tool-finished"}
+{"ts":1789369521223,"trace":"-","type":"usage","agent":"session-recording","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369521223,"trace":"-","type":"done","agent":"session-recording","detail":"tool-finished"}
+PASS agent_result
+PASS append_only_entry_count
+PASS successful_turn_is_bracketed
+PASS continuation_has_no_duplicate_user
+PASS raw_assistant_per_model_response
+PASS tool_result_recorded_once
+PASS final_assistant_audit_recorded
+PASS reopen_restores_runtime_messages_without_final_duplicate
+PASS restored_history_contains_tool_and_final_raw
+PASS agent_recording_total_9
+{"ts":1789369523774,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"seed-timeout"}
+{"ts":1789369523779,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"seed-ok"}
+{"ts":1789369523779,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":4,\"total\":5}"}
+{"ts":1789369523779,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"seed-ok"}
+PASS timeout_seed_success
+{"ts":1789369523781,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"timeout-failed-prompt"}
+{"ts":1789369524792,"trace":"-","type":"error","agent":"failed-turn-persistence","detail":"智能重试 1 次全部失败"}
+{"ts":1789369524795,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"LLM调用失败: HTTP请求失败: error sending request for url (http://127.0.0.1:57100/v1/turns/chat/completions)（根因: operation timed out）"}
+{"ts":1789369524795,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"LLM调用失败: HTTP请求失败: error sending request for url (http://127.0.0.1:57100/v1/turns/chat/completions)（根因: operation timed out）"}
+PASS timeout_failure_returned
+PASS timeout_restore_excludes_failed_prompt
+{"ts":1789369524800,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"recover-timeout"}
+{"ts":1789369524804,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"recovered-clean"}
+{"ts":1789369524804,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369524804,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"recovered-clean"}
+PASS timeout_continued_session_is_clean
+{"ts":1789369524808,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"seed-server"}
+{"ts":1789369524811,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"seed-ok"}
+{"ts":1789369524812,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":4,\"total\":5}"}
+{"ts":1789369524812,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"seed-ok"}
+PASS server_seed_success
+{"ts":1789369524814,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"server-failed-prompt"}
+{"ts":1789369524816,"trace":"-","type":"error","agent":"failed-turn-persistence","detail":"智能重试 1 次全部失败"}
+{"ts":1789369524817,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"LLM调用失败: API返回错误 500 Internal Server Error: {\"error\":{\"message\":\"fixture 500\"}}"}
+{"ts":1789369524817,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"LLM调用失败: API返回错误 500 Internal Server Error: {\"error\":{\"message\":\"fixture 500\"}}"}
+PASS server_failure_returned
+PASS server_restore_excludes_failed_prompt
+{"ts":1789369524819,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"recover-server"}
+{"ts":1789369524822,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"recovered-clean"}
+{"ts":1789369524822,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369524822,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"recovered-clean"}
+PASS server_continued_session_is_clean
+{"ts":1789369524825,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"seed-budget"}
+{"ts":1789369524828,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"seed-ok"}
+{"ts":1789369524828,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":4,\"total\":5}"}
+{"ts":1789369524828,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"seed-ok"}
+PASS budget_seed_success
+{"ts":1789369524830,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"budget-blocked-prompt"}
+{"ts":1789369524830,"trace":"-","type":"budget_exceeded","agent":"failed-turn-persistence","detail":"预算已达到上限，未发出模型请求"}
+{"ts":1789369524831,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"[harness] budget_exceeded"}
+{"ts":1789369524831,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"[harness] budget_exceeded"}
+PASS budget_rejection_returned
+PASS budget_restore_excludes_blocked_prompt
+{"ts":1789369524833,"trace":"-","type":"llm_call","agent":"failed-turn-persistence","detail":"recover-budget"}
+{"ts":1789369524835,"trace":"-","type":"llm_response","agent":"failed-turn-persistence","detail":"recovered-clean"}
+{"ts":1789369524835,"trace":"-","type":"usage","agent":"failed-turn-persistence","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369524835,"trace":"-","type":"done","agent":"failed-turn-persistence","detail":"recovered-clean"}
+PASS budget_continued_session_is_clean
+PASS timeout_error_audit_retained
+PASS server_error_audit_retained
+PASS budget_error_audit_retained
+PASS failed_turn_persistence_total_15
+==> passed: Agent session integration (9s)
+
+==> suite: CLI unit
+PASS explicit_db_path_wins
+PASS chat_provider_ready
+PASS generic_provider_ready
+PASS missing_provider_rejected
+PASS embedding_ready
+PASS embedding_partial_rejected
+PASS mcp_command_ready
+PASS mcp_url_ready
+PASS diagnostics_chat_ready
+PASS diagnostics_redacts_values
+PASS session_list_count
+PASS session_list_id
+PASS session_list_entry_count
+PASS restore_info_count
+PASS restore_info_omits_content
+PASS cli_total_15
+==> passed: CLI unit (3s)
+
+==> suite: CLI native
+PASS cli_e2e_native_compile
+==> passed: CLI native (5s)
+
+==> suite: service persistence
+成功编译 1 个可执行文件 (macOS)
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369537288,"trace":"-","type":"llm_call","agent":"服务代理","detail":"first"}
+{"ts":1789369537292,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369537292,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369537292,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369539351,"trace":"-","type":"llm_call","agent":"服务代理","detail":"second"}
+{"ts":1789369539353,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-2"}
+{"ts":1789369539353,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369539353,"trace":"-","type":"done","agent":"服务代理","detail":"turn-2"}
+{"ts":1789369539357,"trace":"-","type":"llm_call","agent":"服务代理","detail":"orphan first"}
+{"ts":1789369539358,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369539358,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369539358,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369543481,"trace":"-","type":"llm_call","agent":"服务代理","detail":"slow"}
+{"ts":1789369543992,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-2"}
+{"ts":1789369543992,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369543992,"trace":"-","type":"done","agent":"服务代理","detail":"turn-2"}
+{"ts":1789369543999,"trace":"-","type":"llm_call","agent":"服务代理","detail":"slow"}
+{"ts":1789369544516,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-3"}
+{"ts":1789369544516,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369544516,"trace":"-","type":"done","agent":"服务代理","detail":"turn-3"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369546576,"trace":"-","type":"llm_call","agent":"服务代理","detail":"use blocking tool"}
+{"ts":1789369546580,"trace":"-","type":"llm_response","agent":"服务代理","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_service_1\",\"type\":\"function\",\"function\":{\"name\":\"fixture_tool\",\"arguments\":\"{}\"}}]}"}
+{"ts":1789369546580,"trace":"-","type":"tool_call","agent":"服务代理","detail":"fixture_tool({})"}
+{"ts":1789369546625,"trace":"-","type":"tool_result","agent":"服务代理","detail":"fixture_tool → fixture-result"}
+{"ts":1789369546626,"trace":"-","type":"llm_response","agent":"服务代理","detail":"tool-finished"}
+{"ts":1789369546626,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369546626,"trace":"-","type":"done","agent":"服务代理","detail":"tool-finished"}
+{"ts":1789369546630,"trace":"-","type":"llm_call","agent":"服务代理","detail":"takeover"}
+{"ts":1789369546631,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-4"}
+{"ts":1789369546631,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369546631,"trace":"-","type":"done","agent":"服务代理","detail":"turn-4"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369548697,"trace":"-","type":"llm_call","agent":"服务代理","detail":"model error"}
+{"ts":1789369548699,"trace":"-","type":"retry","agent":"服务代理","detail":"试次 1 可重试错误，延迟 100 ms"}
+{"ts":1789369548806,"trace":"-","type":"retry","agent":"服务代理","detail":"试次 2 可重试错误，延迟 200 ms"}
+{"ts":1789369549017,"trace":"-","type":"error","agent":"服务代理","detail":"智能重试 3 次全部失败"}
+{"ts":1789369549020,"trace":"-","type":"llm_response","agent":"服务代理","detail":"工具对话失败: API返回错误 500 Internal Server Error: "}
+{"ts":1789369549025,"trace":"-","type":"llm_call","agent":"服务代理","detail":"after error"}
+{"ts":1789369549028,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549028,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369549028,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549034,"trace":"-","type":"llm_call","agent":"服务代理","detail":"use tool"}
+{"ts":1789369549036,"trace":"-","type":"llm_response","agent":"服务代理","detail":"{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_service_1\",\"type\":\"function\",\"function\":{\"name\":\"fixture_tool\",\"arguments\":\"{}\"}}]}"}
+{"ts":1789369549036,"trace":"-","type":"tool_call","agent":"服务代理","detail":"fixture_tool({})"}
+{"ts":1789369549036,"trace":"-","type":"tool_result","agent":"服务代理","detail":"fixture_tool → fixture-result"}
+{"ts":1789369549038,"trace":"-","type":"llm_response","agent":"服务代理","detail":"tool-finished"}
+{"ts":1789369549038,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369549038,"trace":"-","type":"done","agent":"服务代理","detail":"tool-finished"}
+{"ts":1789369549044,"trace":"-","type":"llm_call","agent":"服务代理","detail":"structured\n\n严格要求：只输出一个 JSON 对象，不要任何解释、不要代码块标记（``` 也不要）。该 JSON 对象必须包含以下字段：\"turns\"。"}
+{"ts":1789369549046,"trace":"-","type":"llm_response","agent":"服务代理","detail":"{\"turns\":1}"}
+{"ts":1789369549046,"trace":"-","type":"done","agent":"服务代理","detail":"{\"turns\":1}"}
+{"ts":1789369549051,"trace":"-","type":"llm_call","agent":"服务代理","detail":"quota"}
+{"ts":1789369549052,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549052,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369549052,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549058,"trace":"-","type":"llm_call","agent":"服务代理","detail":"slow"}
+{"ts":1789369549576,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549576,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369549576,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549587,"trace":"-","type":"llm_call","agent":"服务代理","detail":"after concurrent"}
+{"ts":1789369549591,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369549591,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369549591,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369551655,"trace":"-","type":"llm_call","agent":"服务代理","detail":"dev compatibility"}
+{"ts":1789369551658,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369551658,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369551658,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+启动服务器: http://127.0.0.1:57131
+服务器运行中（并发处理），按 Ctrl+C 优雅关闭
+{"ts":1789369553742,"trace":"-","type":"llm_call","agent":"服务代理","detail":"legacy dev"}
+{"ts":1789369553744,"trace":"-","type":"llm_response","agent":"服务代理","detail":"turn-1"}
+{"ts":1789369553744,"trace":"-","type":"usage","agent":"服务代理","detail":"{\"prompt\":1,\"completion\":1,\"total\":2}"}
+{"ts":1789369553744,"trace":"-","type":"done","agent":"服务代理","detail":"turn-1"}
+PASS service_legacy_forever_lock_schema_migrates_to_leases
+PASS service_missing_and_invalid_bearer
+PASS service_forged_identity_body_ignored
+PASS service_session_create
+PASS service_session_continue_after_restart
+PASS service_unexpired_orphan_lease_conflicts
+PASS service_stale_lease_takeover_after_restart
+PASS service_old_owner_cannot_touch_or_unlock_new_lease
+PASS service_active_taken_over_lease_conflicts
+PASS service_concurrent_same_session_conflicts_without_interleaving
+PASS service_session_conflict_does_not_consume_or_leak_quota
+PASS service_active_non_idempotent_tool_blocks_takeover
+PASS service_malformed_session_id
+PASS service_unknown_session
+PASS service_owner_mismatch_not_enumerable
+PASS service_rejects_legacy_runtime_handle
+PASS service_prequota_rejection_does_not_release_other_request
+PASS service_oversized_prompt
+PASS service_oversized_body
+PASS service_oversized_content_length_rejected_before_body_and_auth
+PASS service_oversized_chunked_stream_rejected_before_full_body
+PASS service_runtime_cleanup_after_model_error
+PASS service_persistent_tool_loop
+PASS service_json_persistent_semantics
+PASS service_expired_bearer
+PASS service_request_quota_429
+PASS service_quota_denial_releases_session_lock
+PASS service_concurrent_run_quota_429
+PASS service_quota_counters_release_after_429_and_completion
+PASS service_audit_redaction
+PASS service_anonymous_dev_mode_explicit_opt_in
+PASS service_auth_without_persistence_startup_fail_closed
+PASS service_auth_without_persistence_request_fail_closed
+PASS service_authenticated_guessed_handle_rejected
+PASS service_authenticated_cross_tenant_handle_rejected
+PASS service_nonpersistent_anonymous_dev_quota_429
+==> passed: service persistence (23s)
+
+==> suite: filesystem sandbox isolation
+PASS sandbox_slots_reuse_beyond_16
+PASS filesystem_read_parallel_by_default
+PASS filesystem_list_parallel_by_default
+PASS filesystem_write_serial_by_default
+PASS filesystem_append_serial_by_default
+PASS filesystem_mkdir_serial_by_default
+PASS sandbox_a_read
+PASS sandbox_b_read
+PASS sandbox_a_write_local
+PASS sandbox_a_does_not_cross
+PASS sandbox_b_write_local
+PASS sandbox_b_does_not_cross
+PASS lookup_returns_latest_registration
+PASS dispatch_uses_latest_registration
+PASS mode_setter_does_not_duplicate_entries
+PASS hook_overlay_becomes_latest_index
+PASS duplicate_registration_count_expected
+==> passed: filesystem sandbox isolation (3s)
+
+==> suite: tool metadata concurrency
+PASS concurrent_metadata_registration_isolated
+PASS concurrent_shared_registry_alignment
+==> passed: tool metadata concurrency (2s)
+
+==> suite: report isolation
+{"ts":1789369563522,"trace":"-","span":1,"parent":0,"type":"tool","agent":"报告","phase":"start","detail":"alpha-step"}
+{"ts":1789369563524,"trace":"-","span":2,"parent":0,"type":"llm","agent":"报告","phase":"start","detail":"beta-step"}
+{"ts":1789369563524,"trace":"-","span":2,"type":"llm","agent":"报告","phase":"end","dur_ms":0,"tokens":22,"cost":2,"detail":"beta-detail"}
+{"ts":1789369563524,"trace":"-","span":1,"type":"tool","agent":"报告","phase":"end","dur_ms":2,"tokens":11,"cost":1,"detail":"alpha-detail"}
+PASS report_a_step_count
+PASS report_b_step_count
+PASS report_a_tokens
+PASS report_b_tokens
+PASS report_a_cost
+PASS report_b_cost
+PASS report_a_title
+PASS report_b_title
+PASS report_a_name_not_mixed
+PASS report_b_name_not_mixed
+{"ts":1789369563525,"trace":"-","span":3,"parent":0,"type":"tool","agent":"报告","phase":"start","detail":"legacy-step"}
+{"ts":1789369563525,"trace":"-","span":3,"type":"tool","agent":"报告","phase":"end","dur_ms":0,"tokens":7,"cost":0,"detail":"legacy-detail"}
+PASS legacy_step_count
+PASS legacy_tokens
+PASS legacy_does_not_modify_explicit
+PASS report_adapter_slots_reuse_beyond_16
+==> passed: report isolation (3s)
+
+==> suite: retrieval config isolation
+PASS retrieval_handles_distinct
+PASS retrieval_config_a_valid
+PASS retrieval_config_b_valid
+PASS config_a_endpoint
+PASS config_a_key
+PASS config_a_model
+PASS config_b_endpoint
+PASS config_b_key
+PASS config_b_model
+PASS legacy_does_not_change_config_a
+PASS legacy_does_not_change_config_b
+PASS invalid_config_rejected
+PASS explicit_config_close
+PASS closed_config_invalid
+PASS closing_config_a_keeps_config_b
+PASS closing_config_a_keeps_config_b_values
+PASS retrieval_config_isolation_total_16
+==> passed: retrieval config isolation (3s)
+
+==> suite: M1 reliability
