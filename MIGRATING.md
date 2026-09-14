@@ -2,11 +2,11 @@
 
 qi-harness is currently in the `0.x` series. Necessary API changes may occur before `1.0`, but each release must identify breaking changes here and in `CHANGELOG.md`.
 
-## Migrating to 0.3.0
+## Migrating to 0.4.0
 
 ### Qi Toolchain Baseline
 
-qi-harness `0.3.x` requires Qi `2026.09.12-2` or newer. `文件工具` follows the new shape of `标准库.操作系统.列出目录` (a string-list handle instead of a newline-joined string) and `MCP装备` uses `标准库.JSON.取显示值`; older compilers cannot compile the package.
+qi-harness `0.4.x` requires Qi `2026.09.12-2` or newer. `文件工具` follows the new shape of `标准库.操作系统.列出目录` (a string-list handle instead of a newline-joined string) and `MCP装备` uses `标准库.JSON.取显示值`; older compilers cannot compile the package.
 
 The governed source baseline is Qi `d82fe23f269d4392b74daed863f5a572ee0385cb` (release 2026.09.12-2), qi-runtime `ba333ad43161f8f7fbac62a849718d593f71653a` (2026.09.12-1), qi-gui `493c6ebad80925735e538c621e639948e9698969`, and qi-web `ce83ee311c60b22d4056529ecb730ccc7db94686`.
 
